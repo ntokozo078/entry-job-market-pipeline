@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        
+        <h2 class="mb-4">{{ page_title }}</h2>
+
+        <form method="get" class="d-flex gap-2 mb-4">
+            <input type="text" name="q" class="form-control" placeholder="Search (e.g. Python, Durban, Intern)..." value="{{ search_query }}">
+            <button type="submit" class="btn btn-primary">Search</button>
+            {% if search_query %}
+                <a href="/" class="btn btn-outline-secondary">Clear</a>
+            {% endif %}
+        </form>
+
+        <h4>Latest Opportunities ({{ jobs|length }})</h4>
+        
+        {% for job in jobs %}
+        <div class="card job-card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h5 class="card-title text-primary">{{ job.title }}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">{{ job.company }} • {{ job.location }}</h6>
+                    </div>
+                    <span class="badge bg-success">{{ job.source }}</span>
+                </div>
+                
+                <p class="card-text small text-muted">
+                    Posted: {{ job.posted_date }}
+                </p>
+                
+                <a href="{{ job.url }}" target="_blank" class="btn btn-sm btn-outline-primary">Apply Now ↗</a>
+            </div>
+        </div>
+        {% else %}
+            <div class="alert alert-warning">
+                No active jobs found. Try running the pipeline!
+            </div>
+        {% endfor %}
+
+    </div>
+</div>
+{% endblock %}

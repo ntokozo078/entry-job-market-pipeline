@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <h2 class="mb-4 text-center">Market Intelligence Dashboard</h2>
+
+    <div class="row text-center mb-5">
+        <div class="col-md-6">
+            <div class="card border-primary mb-3">
+                <div class="card-body">
+                    <h5 class="text-primary">Total Jobs Tracked</h5>
+                    <h1 class="display-4 fw-bold">{{ total_jobs }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-success mb-3">
+                <div class="card-body">
+                    <h5 class="text-success">Active Now</h5>
+                    <h1 class="display-4 fw-bold">{{ active_jobs }}</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-5">
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">Jobs by Source</div>
+                <div class="card-body">
+                    <canvas id="sourceChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">Top Hiring Locations</div>
+                <div class="card-body">
+                    <canvas id="locationChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-5">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">Skill Demand (Keywords in Title)</div>
+                <div class="card-body">
+                    <canvas id="skillChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // --- 1. SOURCE CHART (Doughnut) ---
+    const sourceCanvas = document.getElementById('sourceChart');
+    if (sourceCanvas) {
+        new Chart(sourceCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: {{ source_labels | tojson }},
+                datasets: [{
+                    data: {{ source_values | tojson }},
+                    backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6610f2'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    }
+
+    // --- 2. LOCATION CHART (Bar) ---
+    const locCanvas = document.getElementById('locationChart');
+    if (locCanvas) {
+        new Chart(locCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: {{ loc_labels | tojson }},
+                datasets: [{
+                    label: 'Jobs per Location',
+                    data: {{ loc_values | tojson }},
+                    backgroundColor: '#0d6efd',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // --- 3. SKILL CHART (Horizontal Bar) ---
+    const skillCanvas = document.getElementById('skillChart');
+    if (skillCanvas) {
+        new Chart(skillCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: {{ skill_labels | tojson }},
+                datasets: [{
+                    label: 'Mentions in Job Titles',
+                    data: {{ skill_values | tojson }},
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                    borderColor: '#198754',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y', // This makes it horizontal
+                responsive: true,
+                scales: {
+                    x: { beginAtZero: true }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
