@@ -7,7 +7,7 @@
 
 A full-stack data engineering project that automates the collection, cleaning, and visualization of entry-level tech jobs in South Africa and remote Data Engineering roles worldwide.
 
-**[View Live Demo](https://sa-job-tracker.onrender.com)** *(Replace with your actual Render URL)*
+**[View Live Demo](https://entry-job-market-pipeline.onrender.com/)** 
 
 ---
 

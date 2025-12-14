@@ -1,27 +1,11 @@
-# app/web/routes.py
-import threading
-from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app
+from flask import Blueprint, render_template, request, flash, redirect, url_for
 from sqlalchemy import func
 from app.models import db, Job
-from ingestion.pipeline import run_etl  # <--- Import our new function
+from ingestion.pipeline import run_etl  # <--- Import the pipeline function
 
 web_bp = Blueprint('web', __name__)
 
-# --- HELPER FUNCTION FOR THREADING ---
-def run_background_pipeline(app_context):
-    """
-    Runs the pipeline in a separate thread.
-    We must pass the 'app_context' so the thread can find the Database.
-    """
-    with app_context:
-        try:
-            print(">>> Background Pipeline Triggered!")
-            run_etl()
-            print(">>> Background Pipeline Finished!")
-        except Exception as e:
-            print(f"!!! Background Pipeline Failed: {e}")
-
-# --- ROUTES ---
+# --- 1. STANDARD ROUTES (Home, Global, Stats) ---
 
 @web_bp.route('/')
 def index():
@@ -92,19 +76,30 @@ def stats():
         skill_values=list(skill_counts.values())
     )
 
+# --- 2. THE FIXED REFRESH ROUTE (Better Way) ---
+
 @web_bp.route('/refresh', methods=['POST'])
 def refresh_data():
     """
-    The Manual Button Trigger.
-    Starts the ETL pipeline in a background thread.
+    Runs the pipeline SYNCHRONOUSLY.
+    The page will wait (spin) until it finishes, then report success/error.
     """
-    # 1. Get the real app object to pass to the thread
-    app = current_app._get_current_object()
+    print(">>> Manual Refresh Triggered (Sync Mode)")
     
-    # 2. Start the thread
-    thread = threading.Thread(target=run_background_pipeline, args=(app,))
-    thread.start()
-    
-    # 3. Tell user it started
-    flash("🔄 Pipeline started! It runs in the background. Refresh this page in 1 minute to see results.", "success")
+    try:
+        # 1. Run the pipeline directly. 
+        # This blocks the code, preventing the 'Context Error' from before.
+        new_jobs = run_etl()
+        
+        # 2. Give feedback based on result
+        if new_jobs > 0:
+            flash(f"✅ Success! Pipeline finished and found {new_jobs} new jobs.", "success")
+        else:
+            flash("⚠️ Pipeline finished successfully, but found 0 new jobs.", "warning")
+            
+    except Exception as e:
+        # 3. Catch errors and show them to the user
+        print(f"!!! Pipeline Failed: {e}")
+        flash(f"❌ Error running pipeline: {str(e)}", "danger")
+
     return redirect(url_for('web.index'))
