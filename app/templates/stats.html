@@ -1,54 +1,86 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container py-4">
-    <h2 class="mb-4 text-center">Market Intelligence Dashboard</h2>
+<style>
+    /* Power BI Style Overrides */
+    .dashboard-container {
+        background-color: #f0f2f5; /* Light grey background */
+        min-height: 100vh;
+    }
+    .card {
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* Subtle shadow */
+        margin-bottom: 1rem;
+    }
+    .card-header {
+        background-color: white;
+        border-bottom: 1px solid #eee;
+        font-weight: bold;
+        color: #555;
+        padding: 0.75rem 1rem;
+    }
+    .kpi-card {
+        text-align: center;
+        padding: 1.5rem;
+    }
+    /* Force chart containers to fixed heights for "Dashboard" look */
+    .chart-container-sm { position: relative; height: 250px; width: 100%; }
+    .chart-container-lg { position: relative; height: 300px; width: 100%; }
+</style>
 
-    <div class="row text-center mb-5">
-        <div class="col-md-6">
-            <div class="card border-primary mb-3">
-                <div class="card-body">
-                    <h5 class="text-primary">Total Jobs Tracked</h5>
-                    <h1 class="display-4 fw-bold">{{ total_jobs }}</h1>
+<div class="container-fluid dashboard-container py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0 text-dark fw-bold">📊 Market Intelligence Dashboard</h4>
+        <span class="badge bg-secondary">Live Data</span>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-2 d-flex flex-column">
+            <div class="card flex-fill">
+                <div class="card-body kpi-card d-flex flex-column justify-content-center">
+                    <h6 class="text-muted text-uppercase small">Total Jobs</h6>
+                    <h2 class="text-primary fw-bold mb-0">{{ total_jobs }}</h2>
+                </div>
+            </div>
+            <div class="card flex-fill">
+                <div class="card-body kpi-card d-flex flex-column justify-content-center">
+                    <h6 class="text-muted text-uppercase small">Active Now</h6>
+                    <h2 class="text-success fw-bold mb-0">{{ active_jobs }}</h2>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card border-success mb-3">
+
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Jobs by Source</div>
                 <div class="card-body">
-                    <h5 class="text-success">Active Now</h5>
-                    <h1 class="display-4 fw-bold">{{ active_jobs }}</h1>
+                    <div class="chart-container-sm">
+                        <canvas id="sourceChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header">Top Hiring Locations</div>
+                <div class="card-body">
+                    <div class="chart-container-sm">
+                        <canvas id="locationChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row mb-5">
-        <div class="col-md-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-light">Jobs by Source</div>
+    <div class="row g-3 mt-1">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Skill Demand (Keywords in Title)</div>
                 <div class="card-body">
-                    <canvas id="sourceChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-8">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-light">Top Hiring Locations</div>
-                <div class="card-body">
-                    <canvas id="locationChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mb-5">
-        <div class="col-md-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light">Skill Demand (Keywords in Title)</div>
-                <div class="card-body">
-                    <canvas id="skillChart" height="100"></canvas>
+                    <div class="chart-container-lg">
+                        <canvas id="skillChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -57,76 +89,88 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     
+    // Common Options to make charts responsive like Power BI
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false, // CRITICAL for dashboard fit
+        plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15 } }
+        }
+    };
+
     // --- 1. SOURCE CHART (Doughnut) ---
-    const sourceCanvas = document.getElementById('sourceChart');
-    if (sourceCanvas) {
-        new Chart(sourceCanvas.getContext('2d'), {
+    const ctxSource = document.getElementById('sourceChart');
+    if (ctxSource) {
+        new Chart(ctxSource.getContext('2d'), {
             type: 'doughnut',
             data: {
                 labels: {{ source_labels | tojson }},
                 datasets: [{
                     data: {{ source_values | tojson }},
-                    backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6610f2'],
-                    borderWidth: 1
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+                    borderWidth: 0,
+                    hoverOffset: 4
                 }]
             },
             options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'bottom' }
-                }
+                ...commonOptions,
+                cutout: '65%' // Thinner doughnut ring
             }
         });
     }
 
     // --- 2. LOCATION CHART (Bar) ---
-    const locCanvas = document.getElementById('locationChart');
-    if (locCanvas) {
-        new Chart(locCanvas.getContext('2d'), {
+    const ctxLoc = document.getElementById('locationChart');
+    if (ctxLoc) {
+        new Chart(ctxLoc.getContext('2d'), {
             type: 'bar',
             data: {
                 labels: {{ loc_labels | tojson }},
                 datasets: [{
-                    label: 'Jobs per Location',
+                    label: 'Jobs',
                     data: {{ loc_values | tojson }},
-                    backgroundColor: '#0d6efd',
-                    borderRadius: 4
+                    backgroundColor: '#3b82f6',
+                    borderRadius: 4,
+                    barPercentage: 0.6
                 }]
             },
             options: {
-                responsive: true,
+                ...commonOptions,
+                plugins: { legend: { display: false } }, // Hide legend for cleaner look
                 scales: {
-                    y: { beginAtZero: true }
+                    y: { beginAtZero: true, grid: { color: '#f3f4f6' } },
+                    x: { grid: { display: false } }
                 }
             }
         });
     }
 
     // --- 3. SKILL CHART (Horizontal Bar) ---
-    const skillCanvas = document.getElementById('skillChart');
-    if (skillCanvas) {
-        new Chart(skillCanvas.getContext('2d'), {
+    const ctxSkill = document.getElementById('skillChart');
+    if (ctxSkill) {
+        new Chart(ctxSkill.getContext('2d'), {
             type: 'bar',
             data: {
                 labels: {{ skill_labels | tojson }},
                 datasets: [{
-                    label: 'Mentions in Job Titles',
+                    label: 'Mentions',
                     data: {{ skill_values | tojson }},
-                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
-                    borderColor: '#198754',
-                    borderWidth: 1
+                    backgroundColor: 'rgba(16, 185, 129, 0.7)', // Soft Green
+                    borderColor: '#10b981',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    barPercentage: 0.7
                 }]
             },
             options: {
-                indexAxis: 'y', // This makes it horizontal
-                responsive: true,
+                ...commonOptions,
+                indexAxis: 'y', // Horizontal
                 scales: {
-                    x: { beginAtZero: true }
+                    x: { beginAtZero: true, grid: { color: '#f3f4f6' } },
+                    y: { grid: { display: false } }
                 }
             }
         });
