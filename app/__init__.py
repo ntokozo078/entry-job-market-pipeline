@@ -1,21 +1,26 @@
-# Inside your app setup (likely app/__init__.py)
-import os
+# app/__init__.py
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
+from app.config import Config
+from app.models import db
 
-db = SQLAlchemy()
-
-def create_app():
+def create_app(config_class=Config):
     app = Flask(__name__)
+    app.config.from_object(config_class)
     
-    # 1. Your existing database URL setup
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-    
-    # 2. ADD THIS NEW BLOCK:
+    # --- ADDED: Connection pooling to prevent Render SSL drops ---
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         "pool_pre_ping": True,  # Tests the connection before every query
         "pool_recycle": 300     # Refreshes the connection every 5 minutes
     }
-    
+
+    # Initialize the database with the app
     db.init_app(app)
+
+    # Register Blueprints (The routes)
+    from app.api.routes import api_bp
+    from app.web.routes import web_bp
+    
+    app.register_blueprint(api_bp, url_prefix='/api') 
+    app.register_blueprint(web_bp)                    
+
     return app
