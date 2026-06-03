@@ -1,20 +1,21 @@
-# app/__init__.py
+# Inside your app setup (likely app/__init__.py)
+import os
 from flask import Flask
-from app.config import Config
-from app.models import db
+from flask_sqlalchemy import SQLAlchemy
 
-def create_app(config_class=Config):
+db = SQLAlchemy()
+
+def create_app():
     app = Flask(__name__)
-    app.config.from_object(config_class)
-
-    # Initialize the database with the app
-    db.init_app(app)
-
-    # Register Blueprints (The routes)
-    from app.api.routes import api_bp
-    from app.web.routes import web_bp
     
-    app.register_blueprint(api_bp, url_prefix='/api') # Access at /api/jobs
-    app.register_blueprint(web_bp)                    # Access at /
-
+    # 1. Your existing database URL setup
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+    
+    # 2. ADD THIS NEW BLOCK:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        "pool_pre_ping": True,  # Tests the connection before every query
+        "pool_recycle": 300     # Refreshes the connection every 5 minutes
+    }
+    
+    db.init_app(app)
     return app
