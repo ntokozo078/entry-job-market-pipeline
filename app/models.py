@@ -1,7 +1,7 @@
 # app/models.py
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import uuid  # <--- NEW: Import UUID library
+import uuid
 
 db = SQLAlchemy()
 
@@ -9,10 +9,9 @@ class Job(db.Model):
     __tablename__ = 'jobs'
 
     # Core Identifiers
-    # NEW: Added 'default=...' to automatically generate a unique ID
     id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    
-    source = db.Column(db.String(50), nullable=False)
+
+    source = db.Column(db.String(50), nullable=False, index=True)
     source_job_id = db.Column(db.String, nullable=False)
 
     # Job Details
@@ -21,13 +20,17 @@ class Job(db.Model):
     location = db.Column(db.String)
     url = db.Column(db.Text, nullable=False)
     description = db.Column(db.Text)
-    
+
+    # Salary Data (from Adzuna API)
+    salary_min = db.Column(db.Float, nullable=True)
+    salary_max = db.Column(db.Float, nullable=True)
+
     # Filtering & Logic
     job_type = db.Column(db.String(50))
-    posted_date = db.Column(db.Date)
-    
+    posted_date = db.Column(db.Date, index=True)
+
     # The "Smart" Columns
-    is_active = db.Column(db.Boolean, default=True)
+    is_active = db.Column(db.Boolean, default=True, index=True)
     first_seen_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_seen_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -44,5 +47,9 @@ class Job(db.Model):
             'location': self.location,
             'url': self.url,
             'source': self.source,
-            'posted_date': self.posted_date.isoformat() if self.posted_date else None
+            'posted_date': self.posted_date.isoformat() if self.posted_date else None,
+            'salary_min': self.salary_min,
+            'salary_max': self.salary_max,
+            'description': self.description,
+            'first_seen_at': self.first_seen_at.isoformat() if self.first_seen_at else None,
         }

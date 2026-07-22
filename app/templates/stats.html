@@ -1,180 +1,322 @@
 {% extends "base.html" %}
 
+{% block title %}Analytics Dashboard — JobTracker ZA{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
-<style>
-    /* Power BI Style Overrides */
-    .dashboard-container {
-        background-color: #f0f2f5; /* Light grey background */
-        min-height: 100vh;
-    }
-    .card {
-        border: none;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* Subtle shadow */
-        margin-bottom: 1rem;
-    }
-    .card-header {
-        background-color: white;
-        border-bottom: 1px solid #eee;
-        font-weight: bold;
-        color: #555;
-        padding: 0.75rem 1rem;
-    }
-    .kpi-card {
-        text-align: center;
-        padding: 1.5rem;
-    }
-    /* Force chart containers to fixed heights for "Dashboard" look */
-    .chart-container-sm { position: relative; height: 250px; width: 100%; }
-    .chart-container-lg { position: relative; height: 300px; width: 100%; }
-</style>
+<main class="main-content dashboard">
+  <div class="container-wide">
 
-<div class="container-fluid dashboard-container py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0 text-dark fw-bold">📊 Market Intelligence Dashboard</h4>
-        <span class="badge bg-secondary">Live Data</span>
+    <!-- Dashboard Header -->
+    <div class="dashboard-header">
+      <h1 class="dashboard-title">📊 Market Intelligence</h1>
+      <div style="display:flex; align-items:center; gap:1rem;">
+        <span class="last-updated" id="last-updated-badge">Last updated: {{ last_run }}</span>
+        <span class="live-badge">
+          <span class="live-dot"></span>
+          Live Data
+        </span>
+      </div>
     </div>
 
-    <div class="row g-3">
-        <div class="col-lg-2 d-flex flex-column">
-            <div class="card flex-fill">
-                <div class="card-body kpi-card d-flex flex-column justify-content-center">
-                    <h6 class="text-muted text-uppercase small">Total Jobs</h6>
-                    <h2 class="text-primary fw-bold mb-0">{{ total_jobs }}</h2>
-                </div>
-            </div>
-            <div class="card flex-fill">
-                <div class="card-body kpi-card d-flex flex-column justify-content-center">
-                    <h6 class="text-muted text-uppercase small">Active Now</h6>
-                    <h2 class="text-success fw-bold mb-0">{{ active_jobs }}</h2>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-4">
-            <div class="card h-100">
-                <div class="card-header">Jobs by Source</div>
-                <div class="card-body">
-                    <div class="chart-container-sm">
-                        <canvas id="sourceChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-6">
-            <div class="card h-100">
-                <div class="card-header">Top Hiring Locations</div>
-                <div class="card-body">
-                    <div class="chart-container-sm">
-                        <canvas id="locationChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Jobs Scraped</div>
+        <div class="kpi-value" id="kpi-total" data-target="{{ total_jobs }}">0</div>
+        <div class="kpi-sub">All time in database</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Active Now</div>
+        <div class="kpi-value green" id="kpi-active" data-target="{{ active_jobs }}">0</div>
+        <div class="kpi-sub">Currently listed</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Data Sources</div>
+        <div class="kpi-value" id="kpi-sources" data-target="{{ source_labels|length }}">0</div>
+        <div class="kpi-sub">APIs &amp; scrapers</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Skills Tracked</div>
+        <div class="kpi-value" id="kpi-skills" data-target="{{ skill_labels|length }}">0</div>
+        <div class="kpi-sub">In-demand keywords</div>
+      </div>
     </div>
 
-    <div class="row g-3 mt-1">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">Skill Demand (Keywords in Title)</div>
-                <div class="card-body">
-                    <div class="chart-container-lg">
-                        <canvas id="skillChart"></canvas>
-                    </div>
-                </div>
-            </div>
+    <!-- Row 1: Source doughnut + Location bar -->
+    <div class="chart-grid chart-grid-top" style="margin-bottom:1rem;">
+
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title">Jobs by Source</span>
+          <span class="last-updated">{{ source_labels|length }} sources</span>
         </div>
+        <div class="chart-card-body">
+          <div class="chart-container chart-sm">
+            <canvas id="sourceChart" aria-label="Jobs by source chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title">Top Hiring Locations</span>
+          <span class="last-updated">Top 8</span>
+        </div>
+        <div class="chart-card-body">
+          <div class="chart-container chart-sm">
+            <canvas id="locationChart" aria-label="Jobs by location chart"></canvas>
+          </div>
+        </div>
+      </div>
+
     </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Row 2: Skill demand + Trend over time -->
+    <div class="chart-grid chart-grid-bottom">
 
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title">Skill Demand</span>
+          <span class="last-updated">From job titles</span>
+        </div>
+        <div class="chart-card-body">
+          <div class="chart-container chart-md">
+            <canvas id="skillChart" aria-label="Skill demand chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-title">Jobs Posted (Last 14 Days)</span>
+          <span class="last-updated">Daily trend</span>
+        </div>
+        <div class="chart-card-body">
+          <div class="chart-container chart-md">
+            <canvas id="trendChart" aria-label="Jobs trend chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    
-    // Common Options to make charts responsive like Power BI
-    const commonOptions = {
+document.addEventListener('DOMContentLoaded', function () {
+
+  // ── Animated KPI counters ──────────────────────────────────
+  function animateCounter(el) {
+    const target = parseInt(el.dataset.target, 10);
+    if (!target) return;
+    let current = 0;
+    const step = Math.ceil(target / 40);
+    const timer = setInterval(() => {
+      current = Math.min(current + step, target);
+      el.textContent = current.toLocaleString();
+      if (current >= target) clearInterval(timer);
+    }, 30);
+  }
+
+  document.querySelectorAll('.kpi-value[data-target]').forEach(animateCounter);
+
+  // ── Shared chart defaults ──────────────────────────────────
+  Chart.defaults.color = '#8b949e';
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  Chart.defaults.font.size = 12;
+
+  const COLORS = {
+    blue:   '#58a6ff',
+    green:  '#3fb950',
+    purple: '#bc8cff',
+    orange: '#d29922',
+    red:    '#f85149',
+    teal:   '#39d0c4',
+  };
+
+  const palette = Object.values(COLORS);
+
+  const gridColor = 'rgba(48, 54, 61, 0.8)';
+
+  // ── 1. Source (Doughnut) ───────────────────────────────────
+  const ctxSource = document.getElementById('sourceChart');
+  if (ctxSource) {
+    new Chart(ctxSource, {
+      type: 'doughnut',
+      data: {
+        labels: {{ source_labels | tojson }},
+        datasets: [{
+          data: {{ source_values | tojson }},
+          backgroundColor: palette,
+          borderColor: '#161b22',
+          borderWidth: 3,
+          hoverOffset: 6,
+        }],
+      },
+      options: {
         responsive: true,
-        maintainAspectRatio: false, // CRITICAL for dashboard fit
+        maintainAspectRatio: false,
+        cutout: '68%',
         plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15 } }
-        }
-    };
+          legend: {
+            position: 'bottom',
+            labels: { boxWidth: 10, padding: 14, color: '#8b949e' },
+          },
+          tooltip: {
+            backgroundColor: '#1c2230',
+            borderColor: '#30363d',
+            borderWidth: 1,
+            padding: 10,
+          },
+        },
+        animation: { animateRotate: true, duration: 800 },
+      },
+    });
+  }
 
-    // --- 1. SOURCE CHART (Doughnut) ---
-    const ctxSource = document.getElementById('sourceChart');
-    if (ctxSource) {
-        new Chart(ctxSource.getContext('2d'), {
-            type: 'doughnut',
-            data: {
-                labels: {{ source_labels | tojson }},
-                datasets: [{
-                    data: {{ source_values | tojson }},
-                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                ...commonOptions,
-                cutout: '65%' // Thinner doughnut ring
-            }
-        });
-    }
+  // ── 2. Location (Horizontal Bar) ──────────────────────────
+  const ctxLoc = document.getElementById('locationChart');
+  if (ctxLoc) {
+    new Chart(ctxLoc, {
+      type: 'bar',
+      data: {
+        labels: {{ loc_labels | tojson }},
+        datasets: [{
+          label: 'Jobs',
+          data: {{ loc_values | tojson }},
+          backgroundColor: 'rgba(88, 166, 255, 0.75)',
+          borderColor: COLORS.blue,
+          borderWidth: 1,
+          borderRadius: 5,
+          borderSkipped: false,
+          barPercentage: 0.65,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1c2230',
+            borderColor: '#30363d',
+            borderWidth: 1,
+            padding: 10,
+          },
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: '#8b949e' } },
+          y: { grid: { display: false }, ticks: { color: '#8b949e' } },
+        },
+        animation: { duration: 700 },
+      },
+    });
+  }
 
-    // --- 2. LOCATION CHART (Bar) ---
-    const ctxLoc = document.getElementById('locationChart');
-    if (ctxLoc) {
-        new Chart(ctxLoc.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: {{ loc_labels | tojson }},
-                datasets: [{
-                    label: 'Jobs',
-                    data: {{ loc_values | tojson }},
-                    backgroundColor: '#3b82f6',
-                    borderRadius: 4,
-                    barPercentage: 0.6
-                }]
-            },
-            options: {
-                ...commonOptions,
-                plugins: { legend: { display: false } }, // Hide legend for cleaner look
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f3f4f6' } },
-                    x: { grid: { display: false } }
-                }
-            }
-        });
-    }
+  // ── 3. Skill Demand (Horizontal Bar) ──────────────────────
+  const ctxSkill = document.getElementById('skillChart');
+  if (ctxSkill) {
+    const skillData = {{ skill_values | tojson }};
+    const maxVal = Math.max(...skillData);
+    const bgColors = skillData.map(v => {
+      const ratio = v / maxVal;
+      const r = Math.round(88 + (63-88) * ratio);
+      const g = Math.round(166 + (185-166) * ratio);
+      const b = Math.round(255 + (80-255) * ratio);
+      return `rgba(${r},${g},${b},0.8)`;
+    });
 
-    // --- 3. SKILL CHART (Horizontal Bar) ---
-    const ctxSkill = document.getElementById('skillChart');
-    if (ctxSkill) {
-        new Chart(ctxSkill.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: {{ skill_labels | tojson }},
-                datasets: [{
-                    label: 'Mentions',
-                    data: {{ skill_values | tojson }},
-                    backgroundColor: 'rgba(16, 185, 129, 0.7)', // Soft Green
-                    borderColor: '#10b981',
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    barPercentage: 0.7
-                }]
-            },
-            options: {
-                ...commonOptions,
-                indexAxis: 'y', // Horizontal
-                scales: {
-                    x: { beginAtZero: true, grid: { color: '#f3f4f6' } },
-                    y: { grid: { display: false } }
-                }
-            }
-        });
-    }
+    new Chart(ctxSkill, {
+      type: 'bar',
+      data: {
+        labels: {{ skill_labels | tojson }},
+        datasets: [{
+          label: 'Mentions in job titles',
+          data: skillData,
+          backgroundColor: bgColors,
+          borderRadius: 5,
+          borderSkipped: false,
+          barPercentage: 0.7,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1c2230',
+            borderColor: '#30363d',
+            borderWidth: 1,
+            padding: 10,
+          },
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: '#8b949e' } },
+          y: { grid: { display: false }, ticks: { color: '#e6edf3' } },
+        },
+        animation: { duration: 900 },
+      },
+    });
+  }
+
+  // ── 4. Trend (Line chart — jobs posted per day) ────────────
+  const ctxTrend = document.getElementById('trendChart');
+  if (ctxTrend) {
+    new Chart(ctxTrend, {
+      type: 'line',
+      data: {
+        labels: {{ trend_labels | tojson }},
+        datasets: [{
+          label: 'New Jobs',
+          data: {{ trend_values | tojson }},
+          borderColor: COLORS.green,
+          backgroundColor: 'rgba(63, 185, 80, 0.08)',
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: COLORS.green,
+          pointBorderColor: '#161b22',
+          pointBorderWidth: 2,
+          fill: true,
+          tension: 0.35,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1c2230',
+            borderColor: '#30363d',
+            borderWidth: 1,
+            padding: 10,
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: gridColor },
+            ticks: { color: '#8b949e', maxRotation: 45 },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: gridColor },
+            ticks: { color: '#8b949e' },
+          },
+        },
+        animation: { duration: 1000 },
+      },
+    });
+  }
+
 });
 </script>
 {% endblock %}

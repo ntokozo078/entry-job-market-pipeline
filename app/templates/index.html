@@ -1,45 +1,400 @@
 {% extends "base.html" %}
 
+{% block title %}{{ page_title }} — JobTracker ZA{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        
-        <h2 class="mb-4">{{ page_title }}</h2>
 
-        <form method="get" class="d-flex gap-2 mb-4">
-            <input type="text" name="q" class="form-control" placeholder="Search (e.g. Python, Durban, Intern)..." value="{{ search_query }}">
-            <button type="submit" class="btn btn-primary">Search</button>
-            {% if search_query %}
-                <a href="/" class="btn btn-outline-secondary">Clear</a>
-            {% endif %}
-        </form>
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">
+      <span>🇿🇦</span>
+      <span>Live · Updated Daily</span>
+    </div>
 
-        <h4>Latest Opportunities ({{ jobs|length }})</h4>
-        
-        {% for job in jobs %}
-        <div class="card job-card mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h5 class="card-title text-primary">{{ job.title }}</h5>
-                        <h6 class="card-subtitle mb-2 text-muted">{{ job.company }} • {{ job.location }}</h6>
-                    </div>
-                    <span class="badge bg-success">{{ job.source }}</span>
-                </div>
-                
-                <p class="card-text small text-muted">
-                    Posted: {{ job.posted_date }}
-                </p>
-                
-                <a href="{{ job.url }}" target="_blank" class="btn btn-sm btn-outline-primary">Apply Now ↗</a>
-            </div>
+    <h1 class="hero-title">
+      {% if 'Global' in page_title %}
+        Find Your Next <span class="highlight">Remote Tech</span><br>Role
+      {% else %}
+        Discover <span class="highlight">Entry-Level Tech</span><br>Jobs in South Africa
+      {% endif %}
+    </h1>
+
+    <p class="hero-subtitle">
+      {% if 'Global' in page_title %}
+        Remote-first data engineering, ETL, analytics and software roles from the UK,
+        US, Canada, Australia and beyond — curated for juniors and interns.
+      {% else %}
+        Software development, data, cloud, cybersecurity and graduate roles across South Africa — filtered for
+        0–2 years experience, updated every day.
+      {% endif %}
+    </p>
+
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="stat-value" id="hero-job-count">{{ pagination.total or jobs|length }}</span>
+        <span class="stat-label">Active jobs</span>
+        <span class="stat-sublabel">Currently listed</span>
+      </div>
+      <div class="hero-stat">
+        <span class="stat-value">Daily</span>
+        <span class="stat-label">Pipeline cadence</span>
+        <span class="stat-sublabel">Auto-refreshed</span>
+      </div>
+      <div class="hero-stat">
+        <span class="stat-value">0–2 yrs</span>
+        <span class="stat-label">Experience target</span>
+        <span class="stat-sublabel">Junior · Grad · Intern</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== MAIN CONTENT ===================== -->
+<main class="main-content">
+  <div class="container layout-grid">
+
+    <!-- ── Sidebar Categories ──────────────────────────── -->
+    {% set sq = search_query|lower %}
+    <aside class="sidebar-categories" aria-label="Categories">
+      <div class="sidebar-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+        CATEGORIES
+      </div>
+      
+      <a href="{{ request.path }}" class="category-link {% if not search_query %}active{% endif %}">
+        <span class="cat-icon">◆</span>
+        <span class="cat-name">All roles</span>
+        <span class="cat-count">{{ category_counts.all|default(0) }}</span>
+      </a>
+      
+      <a href="{{ request.path }}?q=junior+developer" class="category-link {% if 'junior' in sq and 'developer' in sq %}active{% endif %}">
+        <span class="cat-icon">✧</span>
+        <span class="cat-name">Junior Dev</span>
+        <span class="cat-count">{{ category_counts.junior_dev|default(0) }}</span>
+      </a>
+      
+      <a href="{{ request.path }}?q=graduate" class="category-link {% if 'graduate' in sq and 'developer' not in sq and 'junior' not in sq %}active{% endif %}">
+        <span class="cat-icon">✧</span>
+        <span class="cat-name">Graduate</span>
+        <span class="cat-count">{{ category_counts.graduate|default(0) }}</span>
+      </a>
+      
+      <a href="{{ request.path }}?q=intern" class="category-link {% if 'intern' in sq %}active{% endif %}">
+        <span class="cat-icon">◉</span>
+        <span class="cat-name">Intern</span>
+        <span class="cat-count">{{ category_counts.intern|default(0) }}</span>
+      </a>
+      
+      <a href="{{ request.path }}?q=data" class="category-link {% if 'data' in sq and 'engineer' not in sq %}active{% endif %}">
+        <span class="cat-icon">⊟</span>
+        <span class="cat-name">Data</span>
+        <span class="cat-count">{{ category_counts.data|default(0) }}</span>
+      </a>
+      
+      <a href="{{ request.path }}?q=cyber+security" class="category-link {% if 'cyber' in sq %}active{% endif %}">
+        <span class="cat-icon">◐</span>
+        <span class="cat-name">Cyber</span>
+        <span class="cat-count">{{ category_counts.cyber|default(0) }}</span>
+      </a>
+      
+      <a href="{{ request.path }}?q=cloud" class="category-link {% if 'cloud' in sq %}active{% endif %}">
+        <span class="cat-icon">☁</span>
+        <span class="cat-name">Cloud</span>
+        <span class="cat-count">{{ category_counts.cloud|default(0) }}</span>
+      </a>
+      
+      {% if 'Global' not in page_title %}
+      <a href="{{ request.path }}?q=ict+graduate" class="category-link {% if 'ict' in sq %}active{% endif %}">
+        <span class="cat-icon">⚇</span>
+        <span class="cat-name">ICT Grad</span>
+        <span class="cat-count">{{ category_counts.ict_grad|default(0) }}</span>
+      </a>
+      
+      <a href="{{ request.path }}?q=information+systems" class="category-link {% if 'systems' in sq %}active{% endif %}">
+        <span class="cat-icon">⚆</span>
+        <span class="cat-name">IS Grad</span>
+        <span class="cat-count">{{ category_counts.is_grad|default(0) }}</span>
+      </a>
+      {% endif %}
+    </aside>
+
+    <div class="main-column">
+      <!-- Search bar -->
+      <form method="get" id="search-form">
+        <div class="search-container">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" style="flex-shrink:0;">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input type="text" name="q" class="search-input" id="search-input"
+            placeholder="Search by title, tech, location… e.g. Python, Durban, Junior"
+            value="{{ search_query }}" autocomplete="off">
+          <button type="submit" class="btn-search" id="btn-search-submit">Search</button>
+          {% if search_query %}
+            <a href="{{ request.path }}" class="btn-clear" id="btn-search-clear">Clear</a>
+          {% endif %}
         </div>
-        {% else %}
-            <div class="alert alert-warning">
-                No active jobs found. Try running the pipeline!
+      </form>
+
+      <!-- Results count -->
+      <div class="section-header">
+        <p class="results-count">
+          {% if search_query %}Results for <strong>"{{ search_query }}"</strong> · {% endif %}
+          Showing <strong>{{ jobs|length }}</strong>
+          {% if pagination.total %}of <strong>{{ pagination.total }}</strong>{% endif %} jobs
+          · page {{ pagination.page }} of {{ pagination.pages }}
+        </p>
+      </div>
+
+      <!-- ── Job List ─────────────────────────────────────────────── -->
+      {% if jobs %}
+      <div class="job-list" id="job-list">
+        {% for job in jobs %}
+        {% set delta = (now - job.posted_date).days if job.posted_date else 999 %}
+        <article class="job-card" id="job-{{ job.id }}">
+
+          <!-- Main row: body + actions -->
+          <div class="job-card-main">
+            <div class="job-card-body">
+              <h2 class="job-title">{{ job.title }}</h2>
+
+              <div class="job-meta">
+                <span class="meta-item">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path><path d="M12 6h.01"></path><path d="M12 10h.01"></path><path d="M12 14h.01"></path><path d="M16 10h.01"></path><path d="M16 14h.01"></path><path d="M8 10h.01"></path><path d="M8 14h.01"></path></svg>
+                  {{ job.company or 'Unknown Company' }}
+                </span>
+                <span class="meta-item">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                  {{ job.location or 'Location Unknown' }}
+                </span>
+              </div>
+
+              <div class="job-tags">
+                <!-- Feature 1: NEW badge -->
+                {% if delta <= 2 %}
+                  <span class="tag tag-new" title="Posted in the last 48 hours">✨ NEW</span>
+                {% endif %}
+
+                <span class="tag tag-source">{{ job.source }}</span>
+
+                {% if job.salary_min or job.salary_max %}
+                <span class="tag tag-salary">
+                  💰
+                  {% if job.salary_min and job.salary_max %}
+                    R{{ "{:,.0f}".format(job.salary_min) }} – R{{ "{:,.0f}".format(job.salary_max) }}
+                  {% elif job.salary_min %}
+                    From R{{ "{:,.0f}".format(job.salary_min) }}
+                  {% else %}
+                    Up to R{{ "{:,.0f}".format(job.salary_max) }}
+                  {% endif %}
+                </span>
+                {% endif %}
+
+                {% if 'remote' in (job.location or '')|lower %}
+                  <span class="tag tag-remote">Remote</span>
+                {% endif %}
+
+                {% if job.posted_date %}
+                <span class="tag tag-date">
+                  {% if delta == 0 %}Today
+                  {% elif delta == 1 %}1d ago
+                  {% elif delta <= 7 %}{{ delta }}d ago
+                  {% else %}{{ job.posted_date.strftime('%d %b %Y') }}
+                  {% endif %}
+                </span>
+                {% endif %}
+              </div>
             </div>
+
+            <!-- Actions column -->
+            <div class="job-card-actions">
+              <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer"
+                 class="btn-apply" id="apply-{{ job.id }}">Apply ↗</a>
+
+              <!-- Feature 4: Description toggle button -->
+              {% if job.description and job.description|length > 20 %}
+              <button class="btn-details" id="btn-desc-{{ job.id }}"
+                      onclick="toggleDesc('{{ job.id }}')" type="button">
+                Details <span class="chevron">▾</span>
+              </button>
+              {% endif %}
+
+              <!-- Feature 3: Track button -->
+              <button class="btn-track"
+                      id="track-{{ job.id }}"
+                      type="button"
+                      onclick="trackJob(this)"
+                      data-job-id="{{ job.id }}"
+                      data-title="{{ job.title|replace('"', '&quot;') }}"
+                      data-company="{{ (job.company or 'Unknown')|replace('"', '&quot;') }}"
+                      data-location="{{ job.location or '' }}"
+                      data-url="{{ job.url }}"
+                      data-source="{{ job.source }}"
+                      data-date="{{ job.posted_date }}">
+                ☆ Track
+              </button>
+            </div>
+          </div>
+
+          <!-- Feature 4: Expandable description panel -->
+          {% if job.description and job.description|length > 20 %}
+          <div class="job-desc-panel" id="desc-{{ job.id }}">
+
+            {# Extract skill keywords mentioned in the description #}
+            {% set desc_lower = job.description|lower %}
+            {% set skills = ['Python','SQL','Java','JavaScript','React','AWS','Azure','Docker',
+                             'Git','Linux','Spark','Power BI','Tableau','Excel','REST','API',
+                             '.NET','C#','PHP','Kotlin','Swift','Terraform','Kubernetes'] %}
+            {% set found_skills = [] %}
+            {% for sk in skills %}
+              {% if sk|lower in desc_lower %}
+                {% set _ = found_skills.append(sk) %}
+              {% endif %}
+            {% endfor %}
+
+            {% if found_skills %}
+            <div class="desc-skills">
+              {% for sk in found_skills %}
+                <span class="desc-skill-tag">{{ sk }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="desc-text">{{ job.description|striptags|truncate(800, True, '…') }}</div>
+
+            <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer"
+               class="btn-apply" style="display:inline-flex;">
+              View Full Posting ↗
+            </a>
+          </div>
+          {% endif %}
+
+        </article>
+        {% endfor %}
+      </div>
+
+      <!-- Pagination -->
+      {% if pagination.pages > 1 %}
+      <nav class="pagination-container" aria-label="Pagination">
+        {% if pagination.has_prev %}
+          <a href="{{ url_for(request.endpoint, page=pagination.prev_num, q=search_query) }}"
+             class="page-link-item" id="page-prev">‹</a>
+        {% else %}
+          <span class="page-link-item disabled">‹</span>
+        {% endif %}
+
+        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+          {% if p %}
+            <a href="{{ url_for(request.endpoint, page=p, q=search_query) }}"
+               class="page-link-item {% if p == pagination.page %}active{% endif %}"
+               id="page-{{ p }}">{{ p }}</a>
+          {% else %}
+            <span class="page-link-item disabled" style="width:auto;padding:0 .25rem">…</span>
+          {% endif %}
         {% endfor %}
 
-    </div>
-</div>
+        {% if pagination.has_next %}
+          <a href="{{ url_for(request.endpoint, page=pagination.next_num, q=search_query) }}"
+             class="page-link-item" id="page-next">›</a>
+        {% else %}
+          <span class="page-link-item disabled">›</span>
+        {% endif %}
+      </nav>
+      {% endif %}
+
+      {% else %}
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <span class="empty-icon">🔍</span>
+        <h3>No jobs found</h3>
+        <p>
+          {% if search_query %}
+            No results for "{{ search_query }}". Try a different keyword or
+            <a href="{{ request.path }}">view all jobs</a>.
+          {% else %}
+            No active jobs yet. Hit <strong>Refresh</strong> in the nav to trigger the pipeline.
+          {% endif %}
+        </p>
+      </div>
+      {% endif %}
+
+    </div> <!-- End main-column -->
+  </div> <!-- End layout-grid -->
+</main>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ── Feature 4: Toggle description panel ────────────────────
+function toggleDesc(jobId) {
+  const panel = document.getElementById('desc-' + jobId);
+  const btn   = document.getElementById('btn-desc-' + jobId);
+  const isOpen = panel.classList.toggle('open');
+  btn.classList.toggle('open', isOpen);
+}
+
+// ── Feature 1+3: Check tracked state & mark NEW badges ─────
+const TRACKER_KEY = 'jt_applications_v1';
+
+function getTracked() {
+  try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveTracked(apps) {
+  localStorage.setItem(TRACKER_KEY, JSON.stringify(apps));
+}
+
+// Mark already-tracked jobs on page load
+document.addEventListener('DOMContentLoaded', function () {
+  const tracked = getTracked().map(a => a.jobId);
+  tracked.forEach(function (id) {
+    const btn = document.getElementById('track-' + id);
+    if (btn) { btn.classList.add('tracked'); btn.textContent = '✅ Tracked'; }
+  });
+});
+
+// ── Feature 3: Track a job ──────────────────────────────────
+function trackJob(btn) {
+  const jobId   = btn.dataset.jobId;
+  const apps    = getTracked();
+
+  if (apps.find(a => a.jobId === jobId)) {
+    showToast('Already in your tracker! Visit 📋 Tracker to view.', 'warning');
+    return;
+  }
+
+  apps.push({
+    jobId:    jobId,
+    title:    btn.dataset.title,
+    company:  btn.dataset.company,
+    location: btn.dataset.location,
+    url:      btn.dataset.url,
+    source:   btn.dataset.source,
+    date:     btn.dataset.date,
+    status:   'saved',
+    notes:    '',
+    addedAt:  new Date().toISOString(),
+  });
+  saveTracked(apps);
+
+  btn.classList.add('tracked');
+  btn.textContent = '✅ Tracked';
+  showToast('Added to tracker! ⭐ View in 📋 Tracker.', 'success');
+}
+
+// ── Toast system ────────────────────────────────────────────
+function showToast(msg, type) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + (type || 'info');
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3100);
+}
+</script>
 {% endblock %}

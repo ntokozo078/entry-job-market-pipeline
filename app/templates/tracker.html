@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Application Tracker — JobTracker ZA{% endblock %}
+
+{% block content %}
+<main class="main-content">
+  <div class="container-wide">
+
+    <!-- Header -->
+    <div class="tracker-header">
+      <div>
+        <h1>📋 Application Tracker</h1>
+        <p>Track every job application from saved → applied → interview → offer.</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+        <div class="tracker-summary" id="tracker-summary">
+          <div class="tracker-stat">
+            <div class="ts-val" id="stat-total">0</div>
+            <div class="ts-label">Total Tracked</div>
+          </div>
+          <div class="tracker-stat">
+            <div class="ts-val" id="stat-applied">0</div>
+            <div class="ts-label">Applied</div>
+          </div>
+          <div class="tracker-stat">
+            <div class="ts-val" id="stat-interview">0</div>
+            <div class="ts-label">Interviews</div>
+          </div>
+          <div class="tracker-stat">
+            <div class="ts-val" id="stat-offer">0</div>
+            <div class="ts-label">Offers</div>
+          </div>
+        </div>
+        <button class="btn-danger-outline" onclick="confirmClearAll()" id="btn-clear-all" title="Remove all tracked applications">
+          🗑 Clear All
+        </button>
+      </div>
+    </div>
+
+    <!-- Kanban Board -->
+    <div class="kanban-board" id="kanban-board">
+
+      <div class="kanban-column" data-status="saved">
+        <div class="kanban-col-header">
+          <span class="kanban-col-icon">🔖</span>
+          <span class="kanban-col-title">Saved</span>
+          <span class="kanban-count" id="count-saved">0</span>
+        </div>
+        <div class="kanban-cards" id="col-saved"></div>
+      </div>
+
+      <div class="kanban-column" data-status="applied">
+        <div class="kanban-col-header">
+          <span class="kanban-col-icon">📬</span>
+          <span class="kanban-col-title">Applied</span>
+          <span class="kanban-count" id="count-applied">0</span>
+        </div>
+        <div class="kanban-cards" id="col-applied"></div>
+      </div>
+
+      <div class="kanban-column" data-status="interview">
+        <div class="kanban-col-header">
+          <span class="kanban-col-icon">📞</span>
+          <span class="kanban-col-title">Interview</span>
+          <span class="kanban-count" id="count-interview">0</span>
+        </div>
+        <div class="kanban-cards" id="col-interview"></div>
+      </div>
+
+      <div class="kanban-column" data-status="offer">
+        <div class="kanban-col-header">
+          <span class="kanban-col-icon">🎉</span>
+          <span class="kanban-col-title">Offer</span>
+          <span class="kanban-count" id="count-offer">0</span>
+        </div>
+        <div class="kanban-cards" id="col-offer"></div>
+      </div>
+
+      <div class="kanban-column" data-status="rejected">
+        <div class="kanban-col-header">
+          <span class="kanban-col-icon">❌</span>
+          <span class="kanban-col-title">Rejected</span>
+          <span class="kanban-count" id="count-rejected">0</span>
+        </div>
+        <div class="kanban-cards" id="col-rejected"></div>
+      </div>
+
+    </div>
+
+    <!-- Empty state (shown when no applications) -->
+    <div class="tracker-empty" id="tracker-empty">
+      <span>📭</span>
+      <h3>No applications tracked yet</h3>
+      <p>Click <strong>⭐ Track</strong> on any job card to start tracking your applications here.</p>
+      <a href="/" class="btn-search" style="text-decoration:none; display:inline-block; padding:0.6rem 1.5rem;">
+        Browse SA Jobs →
+      </a>
+      &nbsp;
+      <a href="/global" class="btn-search" style="text-decoration:none; display:inline-block; padding:0.6rem 1.5rem; margin-left:0.5rem; background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-text);">
+        Browse Global Jobs →
+      </a>
+    </div>
+
+  </div>
+</main>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ═══════════════════════════════════════════════════════════
+//  Application Tracker — localStorage Kanban
+// ═══════════════════════════════════════════════════════════
+
+const TRACKER_KEY = 'jt_applications_v1';
+const STATUSES    = ['saved', 'applied', 'interview', 'offer', 'rejected'];
+
+const STATUS_META = {
+  saved:     { icon: '🔖', label: 'Saved',     next: 'applied',   prev: null },
+  applied:   { icon: '📬', label: 'Applied',   next: 'interview', prev: 'saved' },
+  interview: { icon: '📞', label: 'Interview', next: 'offer',     prev: 'applied' },
+  offer:     { icon: '🎉', label: 'Offer',     next: null,        prev: 'interview' },
+  rejected:  { icon: '❌', label: 'Rejected',  next: null,        prev: 'applied' },
+};
+
+// ── Storage helpers ─────────────────────────────────────────
+function getApps() {
+  try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveApps(apps) {
+  localStorage.setItem(TRACKER_KEY, JSON.stringify(apps));
+}
+
+// ── Render the entire board ────────────────────────────────
+function renderBoard() {
+  const apps = getApps();
+
+  // Show/hide empty state
+  const isEmpty = apps.length === 0;
+  document.getElementById('tracker-empty').style.display = isEmpty ? 'block' : 'none';
+  document.getElementById('kanban-board').style.display  = isEmpty ? 'none'  : 'grid';
+
+  // Update summary stats
+  document.getElementById('stat-total').textContent     = apps.length;
+  document.getElementById('stat-applied').textContent   = apps.filter(a => a.status === 'applied').length;
+  document.getElementById('stat-interview').textContent = apps.filter(a => a.status === 'interview').length;
+  document.getElementById('stat-offer').textContent     = apps.filter(a => a.status === 'offer').length;
+
+  // Render each column
+  STATUSES.forEach(function(status) {
+    const col    = document.getElementById('col-' + status);
+    const count  = document.getElementById('count-' + status);
+    const bucket = apps.filter(a => a.status === status);
+
+    count.textContent = bucket.length;
+
+    if (bucket.length === 0) {
+      col.innerHTML = '<div class="kanban-empty">Drop jobs here</div>';
+      return;
+    }
+
+    col.innerHTML = bucket.map(function(app) {
+      const meta = STATUS_META[status];
+      const addedDate = new Date(app.addedAt).toLocaleDateString('en-ZA', {
+        day: '2-digit', month: 'short', year: 'numeric'
+      });
+
+      const prevBtn = meta.prev
+        ? `<button class="kc-btn kc-move-prev" onclick="moveApp('${app.jobId}','${meta.prev}')"
+                   title="Move back to ${STATUS_META[meta.prev].label}">
+             ← ${STATUS_META[meta.prev].icon}
+           </button>`
+        : '';
+
+      const nextBtn = meta.next
+        ? `<button class="kc-btn kc-move-next" onclick="moveApp('${app.jobId}','${meta.next}')"
+                   title="Move to ${STATUS_META[meta.next].label}">
+             ${STATUS_META[meta.next].icon} →
+           </button>`
+        : `<button class="kc-btn kc-move-prev" onclick="moveApp('${app.jobId}','applied')"
+                   title="Move back to Applied" style="flex-basis:100%">
+             ← Re-open
+           </button>`;
+
+      // Only show reject button if not already rejected
+      const rejectBtn = (status !== 'rejected')
+        ? `<button class="kc-btn kc-delete" onclick="rejectApp('${app.jobId}')" title="Mark as rejected">
+             ✗ Reject
+           </button>`
+        : '';
+
+      return `
+        <div class="kanban-card" id="kcard-${app.jobId}">
+          <div class="kc-title">${escHtml(app.title)}</div>
+          <div class="kc-company">${escHtml(app.company)} · <span class="tag tag-source" style="font-size:0.65rem;padding:0.1rem 0.4rem;">${escHtml(app.source)}</span></div>
+          <div class="kc-date">Tracked on ${addedDate}</div>
+          <textarea class="kc-notes" placeholder="Add notes (interview date, contact, etc.)…"
+                    onblur="saveNotes('${app.jobId}', this.value)"
+                    onfocus="this.style.height='auto'; this.style.height=this.scrollHeight+'px'">${escHtml(app.notes || '')}</textarea>
+          <div class="kc-actions">
+            <a href="${escHtml(app.url)}" target="_blank" rel="noopener" class="kc-btn kc-apply" title="Open job posting">↗ Apply</a>
+            ${prevBtn}
+            ${nextBtn}
+            ${rejectBtn}
+            <button class="kc-btn kc-delete" onclick="deleteApp('${app.jobId}')" title="Remove from tracker">🗑</button>
+          </div>
+        </div>`;
+    }).join('');
+  });
+}
+
+// ── Actions ─────────────────────────────────────────────────
+function moveApp(jobId, newStatus) {
+  const apps = getApps();
+  const app  = apps.find(a => a.jobId === jobId);
+  if (!app) return;
+  app.status    = newStatus;
+  app.updatedAt = new Date().toISOString();
+  saveApps(apps);
+  renderBoard();
+  showToast(`Moved to ${STATUS_META[newStatus].icon} ${STATUS_META[newStatus].label}`, 'info');
+}
+
+function rejectApp(jobId) {
+  moveApp(jobId, 'rejected');
+}
+
+function saveNotes(jobId, notes) {
+  const apps = getApps();
+  const app  = apps.find(a => a.jobId === jobId);
+  if (!app) return;
+  app.notes = notes;
+  saveApps(apps);
+}
+
+function deleteApp(jobId) {
+  const apps = getApps().filter(a => a.jobId !== jobId);
+  saveApps(apps);
+  renderBoard();
+  showToast('Application removed.', 'warning');
+}
+
+function confirmClearAll() {
+  if (getApps().length === 0) { showToast('Tracker is already empty.', 'info'); return; }
+  if (confirm('Remove ALL tracked applications? This cannot be undone.')) {
+    localStorage.removeItem(TRACKER_KEY);
+    renderBoard();
+    showToast('All applications cleared.', 'warning');
+  }
+}
+
+// ── Utility helpers ─────────────────────────────────────────
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function showToast(msg, type) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + (type || 'info');
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3100);
+}
+
+// ── Boot ────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', renderBoard);
+</script>
+{% endblock %}

@@ -1,72 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Tracker</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; }
-        .job-card { transition: transform 0.2s; }
-        .job-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Entry-level tech job tracker for South Africa and global remote data engineering roles. Updated daily via an automated pipeline.">
+  <title>{% block title %}Job Tracker — Entry-Level SA &amp; Global Tech Roles{% endblock %}</title>
+
+  <!-- Preconnect for Google Fonts performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Custom Design System -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-        <div class="container">
-            <a class="navbar-brand" href="/">🇿🇦 Job Tracker</a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto align-items-center">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">🇿🇦 SA Local</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/global">🌍 Global Remote</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/stats">Stats</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/api/jobs">API</a>
-                    </li>
-                    
-                    <li class="nav-item ms-2">
-                        <form action="{{ url_for('web.refresh_data') }}" method="POST" class="d-inline">
-                            <button type="submit" class="btn btn-sm btn-outline-success fw-bold">
-                                🔄 Refresh
-                            </button>
-                        </form>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+  <!-- ===================== NAVBAR ===================== -->
+  <nav class="navbar" role="navigation" aria-label="Main navigation">
+    <div class="container" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
 
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+      <a class="navbar-brand" href="/" aria-label="Home">
+        <span class="brand-dot" title="Pipeline active"></span>
+        JobTracker ZA
+      </a>
 
-        {% block content %}{% endblock %}
+      <div style="display:flex; align-items:center; gap:0.25rem; flex-wrap:wrap;">
+        <a href="/" class="nav-link {% if request.endpoint == 'web.index' %}active{% endif %}"
+           id="nav-sa-jobs">🇿🇦 SA Local</a>
+        <a href="/global" class="nav-link {% if request.endpoint == 'web.global_jobs' %}active{% endif %}"
+           id="nav-global-jobs">🌍 Global Remote</a>
+        <a href="/stats" class="nav-link {% if request.endpoint == 'web.stats' %}active{% endif %}"
+           id="nav-stats">📊 Dashboard</a>
+        <a href="/api/jobs" class="nav-link" id="nav-api" target="_blank" rel="noopener">API ↗</a>
+
+        <!-- Refresh Button -->
+        <form id="refresh-form" action="{{ url_for('web.refresh_data') }}" method="POST" style="display:inline;">
+          <button type="submit" class="btn-refresh" id="btn-refresh" title="Trigger pipeline refresh">
+            <span class="refresh-icon">↻</span>
+            <span class="spinner"></span>
+            Refresh
+          </button>
+        </form>
+      </div>
+
     </div>
+  </nav>
 
-    <footer class="text-center py-4 text-muted mt-5">
-        <small>Built with Flask & Python • Hosted on Render</small>
-    </footer>
+  <!-- ===================== FLASH MESSAGES ===================== -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="container flash-container" style="margin-top:1rem;">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}" role="alert">
+            <span>{{ message }}</span>
+            <button class="flash-close" onclick="this.parentElement.remove()" aria-label="Close">×</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- ===================== PAGE CONTENT ===================== -->
+  {% block content %}{% endblock %}
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <span>Built by <strong>Ntokozo</strong> · Flask + Python + PostgreSQL · Deployed on Render</span>
+        <div class="footer-links">
+          <a href="https://github.com/ntokozo078/entry-job-market-pipeline" target="_blank" rel="noopener" id="footer-github">GitHub ↗</a>
+          <a href="/api/health" target="_blank" rel="noopener" id="footer-health">API Health ↗</a>
+          <a href="/api/jobs" target="_blank" rel="noopener" id="footer-api">REST API ↗</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ===================== SCRIPTS ===================== -->
+  <script>
+    // --- Refresh button: show spinner while polling status ---
+    (function () {
+      const form = document.getElementById('refresh-form');
+      const btn  = document.getElementById('btn-refresh');
+      if (!form || !btn) return;
+
+      form.addEventListener('submit', function () {
+        btn.classList.add('running');
+        btn.disabled = true;
+
+        // Poll /refresh/status every 3 seconds, remove spinner when done
+        const poll = setInterval(function () {
+          fetch('/refresh/status')
+            .then(r => r.json())
+            .then(data => {
+              if (!data.running) {
+                clearInterval(poll);
+                btn.classList.remove('running');
+                btn.disabled = false;
+              }
+            })
+            .catch(() => clearInterval(poll));
+        }, 3000);
+      });
+
+      // On page load: if pipeline is already running (e.g. user refreshed the page), show spinner
+      fetch('/refresh/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data.running) {
+            btn.classList.add('running');
+            btn.disabled = true;
+          }
+        })
+        .catch(() => {});
+    })();
+  </script>
+
+  {% block extra_scripts %}{% endblock %}
 </body>
 </html>
