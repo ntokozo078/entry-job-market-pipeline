@@ -56,7 +56,15 @@
 
     <!-- ── Sidebar Categories ──────────────────────────── -->
     {% set sq = search_query|lower %}
-    <aside class="sidebar-categories" aria-label="Categories">
+
+    <!-- Mobile: toggle button for categories -->
+    <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-expanded="false">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+      Categories
+      <span class="sidebar-toggle-chevron">▾</span>
+    </button>
+
+    <aside class="sidebar-categories" id="sidebar-categories" aria-label="Categories">
       <div class="sidebar-header">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
         CATEGORIES
@@ -396,5 +404,16 @@ function showToast(msg, type) {
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 3100);
 }
+// ── Sidebar toggle (mobile) ─────────────────────────────────
+(function () {
+  const btn  = document.getElementById('sidebar-toggle');
+  const side = document.getElementById('sidebar-categories');
+  if (!btn || !side) return;
+  btn.addEventListener('click', function () {
+    const open = side.classList.toggle('open');
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open);
+  });
+})();
 </script>
 {% endblock %}

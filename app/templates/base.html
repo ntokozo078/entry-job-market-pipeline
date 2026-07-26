@@ -19,20 +19,28 @@
 
   <!-- ===================== NAVBAR ===================== -->
   <nav class="navbar" role="navigation" aria-label="Main navigation">
-    <div class="container" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <div class="container navbar-inner">
 
       <a class="navbar-brand" href="/" aria-label="Home">
         <span class="brand-dot" title="Pipeline active"></span>
         JobTracker ZA
       </a>
 
-      <div style="display:flex; align-items:center; gap:0.25rem; flex-wrap:wrap;">
+      <!-- Hamburger (mobile only) -->
+      <button class="navbar-hamburger" id="navbar-hamburger" aria-label="Toggle navigation" aria-expanded="false" type="button">
+        <span></span><span></span><span></span>
+      </button>
+
+      <!-- Nav links (collapse on mobile) -->
+      <div class="navbar-links" id="navbar-links">
         <a href="/" class="nav-link {% if request.endpoint == 'web.index' %}active{% endif %}"
            id="nav-sa-jobs">🇿🇦 SA Local</a>
         <a href="/global" class="nav-link {% if request.endpoint == 'web.global_jobs' %}active{% endif %}"
            id="nav-global-jobs">🌍 Global Remote</a>
         <a href="/stats" class="nav-link {% if request.endpoint == 'web.stats' %}active{% endif %}"
            id="nav-stats">📊 Dashboard</a>
+        <a href="/tracker" class="nav-link {% if request.endpoint == 'web.tracker' %}active{% endif %}"
+           id="nav-tracker">📋 Tracker</a>
         <a href="/api/jobs" class="nav-link" id="nav-api" target="_blank" rel="noopener">API ↗</a>
 
         <!-- Refresh Button -->
@@ -120,5 +128,27 @@
   </script>
 
   {% block extra_scripts %}{% endblock %}
+
+  <script>
+    // Hamburger menu toggle
+    (function () {
+      const burger = document.getElementById('navbar-hamburger');
+      const links  = document.getElementById('navbar-links');
+      if (!burger || !links) return;
+      burger.addEventListener('click', function () {
+        const open = links.classList.toggle('open');
+        burger.classList.toggle('open', open);
+        burger.setAttribute('aria-expanded', open);
+      });
+      // Close menu when a link is clicked
+      links.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          links.classList.remove('open');
+          burger.classList.remove('open');
+          burger.setAttribute('aria-expanded', 'false');
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
