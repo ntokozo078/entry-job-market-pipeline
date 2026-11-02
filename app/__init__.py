@@ -10,13 +10,17 @@ Connection pooling is configured to handle Render's free-tier SSL drops.
 """
 from datetime import date
 from flask import Flask
-from app.config import Config
+from sqlalchemy import inspect, text
+from app.config import Config, DEV_SECRET_KEY, is_production
 from app.models import db
 
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    if is_production() and app.config['SECRET_KEY'] == DEV_SECRET_KEY:
+        raise RuntimeError('SECRET_KEY must be set in production.')
 
     # Connection pooling — prevents stale connections on Render's free tier
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -41,3 +45,13 @@ def create_app(config_class=Config):
         return {'now': date.today()}
 
     return app
+
+
+def init_db():
+    """Create missing tables and add columns that older databases don't have. Needs an app context."""
+    db.create_all()
+    existing = {column['name'] for column in inspect(db.engine).get_columns('jobs')}
+    for column in ('salary_min', 'salary_max'):
+        if column not in existing:
+            db.session.execute(text(f'ALTER TABLE jobs ADD COLUMN {column} FLOAT'))
+    db.session.commit()

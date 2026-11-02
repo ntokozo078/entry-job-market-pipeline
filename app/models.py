@@ -1,9 +1,15 @@
 # app/models.py
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 db = SQLAlchemy()
+
+
+def utc_now():
+    """Current UTC time without tzinfo, matching the DateTime columns, which store no timezone."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 class Job(db.Model):
     __tablename__ = 'jobs'
@@ -31,8 +37,8 @@ class Job(db.Model):
 
     # The "Smart" Columns
     is_active = db.Column(db.Boolean, default=True, index=True)
-    first_seen_at = db.Column(db.DateTime, default=datetime.utcnow)
-    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow)
+    first_seen_at = db.Column(db.DateTime, default=utc_now)
+    last_seen_at = db.Column(db.DateTime, default=utc_now)
 
     # Unique Constraint
     __table_args__ = (
@@ -52,4 +58,5 @@ class Job(db.Model):
             'salary_max': self.salary_max,
             'description': self.description,
             'first_seen_at': self.first_seen_at.isoformat() if self.first_seen_at else None,
+            'last_seen_at': self.last_seen_at.isoformat() if self.last_seen_at else None,
         }

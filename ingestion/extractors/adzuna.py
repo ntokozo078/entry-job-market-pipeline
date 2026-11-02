@@ -10,17 +10,17 @@ logger = logging.getLogger(__name__)
 ADZUNA_APP_ID = os.environ.get('ADZUNA_APP_ID')
 ADZUNA_APP_KEY = os.environ.get('ADZUNA_APP_KEY')
 
-# ---------------------------------------------------------------------------
 # GHOST JOB FIX: Only fetch jobs posted in the last 7 days.
 # Adzuna redirect_url links expire — fetching only fresh listings prevents
 # "Cannot find page" errors when users click Apply.
-# ---------------------------------------------------------------------------
 MAX_DAYS_OLD_SA     = 7    # SA jobs: only truly fresh listings
 MAX_DAYS_OLD_GLOBAL = 14   # Global: slightly wider window
 
-# ---------------------------------------------------------------------------
+# Per-run caps. SA and global are capped separately, so SA results can't use up the whole run.
+MAX_SA_JOBS_PER_RUN  = 100
+MAX_JOBS_PER_COUNTRY = 20
+
 # SA SEARCH TERMS — broad IT/IS/CS/ICT coverage + junior/graduate focus
-# ---------------------------------------------------------------------------
 SA_SEARCH_TERMS = [
     # ── Junior Developer roles (most requested) ──────────────────────────
     'junior developer',
@@ -117,9 +117,9 @@ SA_SEARCH_TERMS = [
     'graduate programme technology',
 ]
 
-# ---------------------------------------------------------------------------
+
 # GLOBAL SEARCH TERMS
-# ---------------------------------------------------------------------------
+
 GLOBAL_COUNTRIES = ['gb', 'us', 'au', 'de', 'nl', 'ca']
 GLOBAL_SEARCH_TERMS = [
     'data engineer intern',
@@ -151,65 +151,61 @@ SENIOR_KEYWORDS = [
     '3 years', '4 years', '5 years', '5+', 'sr.', 'architect',
 ]
 
-# ---------------------------------------------------------------------------
 # Main extraction function
-# ---------------------------------------------------------------------------
 
 def fetch_adzuna_jobs():
     if not ADZUNA_APP_ID:
         logger.error("No Adzuna API keys found in environment. Skipping.")
         return []
 
-    all_jobs = []
-    seen_ids = set()
-    # Increased cap now that retention is 5 months
-    MAX_JOBS_PER_RUN = 100
-
     # ── Part A: South Africa (targeted junior/graduate search) ────────────
     logger.info("  - [SA] Fetching Junior/Graduate IT jobs...")
-    for term in SA_SEARCH_TERMS:
-        if len(all_jobs) >= MAX_JOBS_PER_RUN:
-            break
-
-        results = query_adzuna(country='za', what=term, max_days_old=MAX_DAYS_OLD_SA)
-        for item in results:
-            title = item.get('title', '')
-            if is_title_outdated(title):
-                continue
-
-            if is_entry_level(item):
-                job = normalize(item, 'adzuna_sa', 'South Africa')
-                if job['source_job_id'] not in seen_ids:
-                    all_jobs.append(job)
-                    seen_ids.add(job['source_job_id'])
-
-        time.sleep(0.2)
+    all_jobs = collect_country_jobs(
+        country='za',
+        terms=SA_SEARCH_TERMS,
+        max_days_old=MAX_DAYS_OLD_SA,
+        limit=MAX_SA_JOBS_PER_RUN,
+        source='adzuna_sa',
+        location_for=lambda item: 'South Africa',
+    )
 
     # ── Part B: Global remote ─────────────────────────────────────────────
     logger.info("  - [GLOBAL] Fetching Data Engineering Internships/Entry...")
     for country in GLOBAL_COUNTRIES:
-        if len(all_jobs) >= MAX_JOBS_PER_RUN:
-            break
-        for term in GLOBAL_SEARCH_TERMS:
-            if len(all_jobs) >= MAX_JOBS_PER_RUN:
-                break
-
-            results = query_adzuna(country=country, what=term, max_days_old=MAX_DAYS_OLD_GLOBAL)
-            for item in results:
-                title = item.get('title', '')
-                if is_title_outdated(title):
-                    continue
-                if is_entry_level(item):
-                    is_remote = is_truly_remote(item)
-                    location_tag = f"Remote ({country.upper()})" if is_remote else f"{country.upper()}"
-                    job = normalize(item, f'adzuna_{country}', location_tag)
-                    if job['source_job_id'] not in seen_ids:
-                        all_jobs.append(job)
-                        seen_ids.add(job['source_job_id'])
-            time.sleep(0.2)
+        tag = country.upper()
+        all_jobs += collect_country_jobs(
+            country=country,
+            terms=GLOBAL_SEARCH_TERMS,
+            max_days_old=MAX_DAYS_OLD_GLOBAL,
+            limit=MAX_JOBS_PER_COUNTRY,
+            source=f'adzuna_{country}',
+            location_for=lambda item: f"Remote ({tag})" if is_truly_remote(item) else tag,
+        )
 
     logger.info(f"  - Total Adzuna Jobs Found: {len(all_jobs)}")
     return all_jobs
+
+
+def collect_country_jobs(country, terms, max_days_old, limit, source, location_for):
+    """Runs the search terms for one country until `limit` unique entry-level jobs are found."""
+    jobs = []
+    seen_ids = set()
+
+    for term in terms:
+        for item in query_adzuna(country=country, what=term, max_days_old=max_days_old):
+            if is_title_outdated(item.get('title', '')) or not is_entry_level(item):
+                continue
+
+            job = normalize(item, source, location_for(item))
+            if job['source_job_id'] not in seen_ids:
+                jobs.append(job)
+                seen_ids.add(job['source_job_id'])
+                if len(jobs) >= limit:
+                    return jobs
+
+        time.sleep(0.2)
+
+    return jobs
 
 
 def query_adzuna(country, what, max_days_old=7):

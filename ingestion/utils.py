@@ -1,6 +1,9 @@
 # ingestion/utils.py
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+def utc_today():
+    return datetime.now(timezone.utc).date()
 
 def is_title_outdated(text):
     """
@@ -32,10 +35,10 @@ def parse_relative_date(date_text):
     """
     Parses '2 days ago', 'Today', '30 June 2017', etc.
     """
-    if not date_text: return datetime.utcnow().date()
-    
+    if not date_text: return utc_today()
+
     text = date_text.lower()
-    today = datetime.utcnow().date()
+    today = utc_today()
     
     # Handle "Today", "Yesterday", "Hours ago"
     if 'today' in text or 'hours' in text or 'minutes' in text: return today
@@ -67,8 +70,8 @@ def is_date_valid(date_obj, max_age_days=60):
     """
     if not date_obj: return False
     
-    today = datetime.utcnow().date()
-    
+    today = utc_today()
+
     # RULE 1: If it's in the future (e.g. Closing Date), it's VALID.
     if date_obj >= today:
         return True

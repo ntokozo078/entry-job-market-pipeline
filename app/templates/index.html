@@ -9,12 +9,12 @@
   <div class="container">
     <div class="hero-eyebrow">
       <span>🇿🇦</span>
-      <span>Live · Updated Daily</span>
+      <span>Entry-level tech jobs</span>
     </div>
 
     <h1 class="hero-title">
       {% if 'Global' in page_title %}
-        Find Your Next <span class="highlight">Remote Tech</span><br>Role
+        Find Your Next <span class="highlight">Global Tech</span><br>Role
       {% else %}
         Discover <span class="highlight">Entry-Level Tech</span><br>Jobs in South Africa
       {% endif %}
@@ -22,11 +22,12 @@
 
     <p class="hero-subtitle">
       {% if 'Global' in page_title %}
-        Remote-first data engineering, ETL, analytics and software roles from the UK,
-        US, Canada, Australia and beyond — curated for juniors and interns.
+        Data engineering, ETL, analytics and software roles from the UK, US, Canada,
+        Australia, Germany and the Netherlands, filtered for juniors and interns.
+        Most aren't remote, so check each listing's location.
       {% else %}
         Software development, data, cloud, cybersecurity and graduate roles across South Africa — filtered for
-        0–2 years experience, updated every day.
+        0–2 years experience using keyword rules.
       {% endif %}
     </p>
 
@@ -35,11 +36,6 @@
         <span class="stat-value" id="hero-job-count">{{ pagination.total or jobs|length }}</span>
         <span class="stat-label">Active jobs</span>
         <span class="stat-sublabel">Currently listed</span>
-      </div>
-      <div class="hero-stat">
-        <span class="stat-value">Daily</span>
-        <span class="stat-label">Pipeline cadence</span>
-        <span class="stat-sublabel">Auto-refreshed</span>
       </div>
       <div class="hero-stat">
         <span class="stat-value">0–2 yrs</span>
@@ -180,14 +176,18 @@
               <div class="job-tags">
                 <!-- Feature 1: NEW badge -->
                 {% if delta <= 2 %}
-                  <span class="tag tag-new" title="Posted in the last 48 hours">✨ NEW</span>
+                  <span class="tag tag-new" title="Posted in the last 48 hours"> NEW</span>
                 {% endif %}
 
-                <span class="tag tag-source">{{ job.source }}</span>
+                {% if job.source.startswith('adzuna') %}
+                  <a class="tag tag-source" href="https://www.adzuna.co.za/" target="_blank" rel="noopener" style="display:inline-block; min-width:116px; min-height:23px;">Adzuna</a>
+                {% else %}
+                  <span class="tag tag-source">{{ job.source }}</span>
+                {% endif %}
 
                 {% if job.salary_min or job.salary_max %}
                 <span class="tag tag-salary">
-                  💰
+                
                   {% if job.salary_min and job.salary_max %}
                     R{{ "{:,.0f}".format(job.salary_min) }} – R{{ "{:,.0f}".format(job.salary_max) }}
                   {% elif job.salary_min %}
@@ -313,14 +313,14 @@
       {% else %}
       <!-- Empty state -->
       <div class="empty-state" id="empty-state">
-        <span class="empty-icon">🔍</span>
+        <span class="empty-icon"></span>
         <h3>No jobs found</h3>
         <p>
           {% if search_query %}
             No results for "{{ search_query }}". Try a different keyword or
             <a href="{{ request.path }}">view all jobs</a>.
           {% else %}
-            No active jobs yet. Hit <strong>Refresh</strong> in the nav to trigger the pipeline.
+            No active jobs yet. They appear after the next pipeline run.
           {% endif %}
         </p>
       </div>
@@ -362,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const tracked = getTracked().map(a => a.jobId);
   tracked.forEach(function (id) {
     const btn = document.getElementById('track-' + id);
-    if (btn) { btn.classList.add('tracked'); btn.textContent = '✅ Tracked'; }
+    if (btn) { btn.classList.add('tracked'); btn.textContent = ' Tracked'; }
   });
 });
 
@@ -372,7 +372,7 @@ function trackJob(btn) {
   const apps    = getTracked();
 
   if (apps.find(a => a.jobId === jobId)) {
-    showToast('Already in your tracker! Visit 📋 Tracker to view.', 'warning');
+    showToast('Already in your tracker! Visit  Tracker to view.', 'warning');
     return;
   }
 
@@ -391,8 +391,8 @@ function trackJob(btn) {
   saveTracked(apps);
 
   btn.classList.add('tracked');
-  btn.textContent = '✅ Tracked';
-  showToast('Added to tracker! ⭐ View in 📋 Tracker.', 'success');
+  btn.textContent = ' Tracked';
+  showToast('Added to tracker!  View in  Tracker.', 'success');
 }
 
 // ── Toast system ────────────────────────────────────────────

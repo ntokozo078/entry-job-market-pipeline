@@ -1,0 +1,42 @@
+{
+  "results": [
+    {
+      "id": "1001",
+      "title": "Junior Data Engineer",
+      "company": {"display_name": "Example Tech"},
+      "location": {"display_name": "Durban, KwaZulu-Natal"},
+      "description": "Graduate-friendly role working with SQL and Python.",
+      "redirect_url": "https://www.adzuna.co.za/details/1001",
+      "created": "2026-10-30T08:15:00Z",
+      "salary_min": 240000,
+      "salary_max": 300000
+    },
+    {
+      "id": "1001",
+      "title": "Junior Data Engineer",
+      "company": {"display_name": "Example Tech"},
+      "location": {"display_name": "Durban, KwaZulu-Natal"},
+      "description": "Graduate-friendly role working with SQL and Python.",
+      "redirect_url": "https://www.adzuna.co.za/details/1001",
+      "created": "2026-10-30T08:15:00Z"
+    },
+    {
+      "id": "1002",
+      "title": "Senior Data Engineer",
+      "company": {"display_name": "Example Tech"},
+      "location": {"display_name": "Cape Town"},
+      "description": "Own the platform.",
+      "redirect_url": "https://www.adzuna.co.za/details/1002",
+      "created": "2026-10-30T08:15:00Z"
+    },
+    {
+      "id": "1003",
+      "title": "IT Graduate Programme 2017",
+      "company": {"display_name": "Example Bank"},
+      "location": {"display_name": "Johannesburg"},
+      "description": "Graduate intake.",
+      "redirect_url": "https://www.adzuna.co.za/details/1003",
+      "created": "2026-10-30T08:15:00Z"
+    }
+  ]
+}

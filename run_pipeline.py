@@ -1,5 +1,6 @@
 # run_pipeline.py
-from app import create_app
+import sys
+from app import create_app, init_db
 from ingestion.pipeline import run_etl
 
 # 1. Create the app to get access to the DB config
@@ -11,7 +12,10 @@ if __name__ == "__main__":
     with app.app_context():
         print("Starting ETL Pipeline...")
         try:
-            run_etl()
-            print("ETL Pipeline completed successfully.")
+            init_db()
+            summary = run_etl()
+            print(f"ETL Pipeline completed: {summary}")
         except Exception as e:
             print(f"ETL Pipeline Failed: {e}")
+            # A non-zero exit lets a scheduler see the failure
+            sys.exit(1)

@@ -1,42 +1,11 @@
 """
 tests/test_ingestion.py
 
-Unit tests for the ingestion layer utilities and filters.
-Run with: python -m pytest tests/ -v
+Unit tests for the ingestion layer utilities.
+Run with: python -m pytest
 """
-import pytest
 from datetime import date, timedelta
-from ingestion.utils import is_title_outdated, clean_text, parse_relative_date, is_date_valid
-
-
-# ── parse_adzuna_date ──────────────────────────────────────────────────────
-
-class TestParseAdzunaDate:
-    """Ensures we extract real posted dates from Adzuna to prevent ghost jobs."""
-
-    def test_parses_iso_datetime(self):
-        # Import lazily to avoid requests import chain issue on some envs
-        import importlib, sys
-        # minimal stub so requests isn't needed
-        if 'ingestion.extractors.adzuna' in sys.modules:
-            mod = sys.modules['ingestion.extractors.adzuna']
-        else:
-            import types
-            mod = types.SimpleNamespace()
-            mod.parse_adzuna_date = None  # will test below manually
-
-        from ingestion.utils import clean_text  # just to confirm utils load
-        from datetime import datetime
-
-        # Direct logic test (mirrors parse_adzuna_date without the import)
-        created = "2026-07-14T10:00:00Z"
-        result = datetime.strptime(created[:10], '%Y-%m-%d').date()
-        assert result == date(2026, 7, 14)
-
-    def test_bad_date_falls_back_to_today(self):
-        from datetime import datetime
-        fallback = datetime.now().date()
-        assert fallback == date.today()
+from ingestion.utils import is_title_outdated, clean_text, parse_relative_date, is_date_valid, utc_today
 
 
 # ── is_title_outdated ──────────────────────────────────────────────────────
@@ -87,17 +56,20 @@ class TestCleanText:
 class TestParseRelativeDate:
 
     def test_today(self):
-        assert parse_relative_date("today") == date.today()
+        assert parse_relative_date("today") == utc_today()
 
     def test_yesterday(self):
-        assert parse_relative_date("yesterday") == date.today() - timedelta(days=1)
+        assert parse_relative_date("yesterday") == utc_today() - timedelta(days=1)
 
     def test_days_ago(self):
         result = parse_relative_date("5 days ago")
-        assert result == date.today() - timedelta(days=5)
+        assert result == utc_today() - timedelta(days=5)
 
     def test_none_defaults_to_today(self):
-        assert parse_relative_date(None) == date.today()
+        assert parse_relative_date(None) == utc_today()
+
+    def test_explicit_date(self):
+        assert parse_relative_date("30 June 2017") == date(2017, 6, 30)
 
 
 # ── is_date_valid ──────────────────────────────────────────────────────────
@@ -105,75 +77,19 @@ class TestParseRelativeDate:
 class TestIsDateValid:
 
     def test_today_is_valid(self):
-        assert is_date_valid(date.today()) is True
+        assert is_date_valid(utc_today()) is True
 
     def test_future_date_is_valid(self):
-        future = date.today() + timedelta(days=10)
+        future = utc_today() + timedelta(days=10)
         assert is_date_valid(future) is True
 
     def test_recent_past_is_valid(self):
-        recent = date.today() - timedelta(days=30)
+        recent = utc_today() - timedelta(days=30)
         assert is_date_valid(recent) is True
 
     def test_old_date_is_invalid(self):
-        old = date.today() - timedelta(days=90)
+        old = utc_today() - timedelta(days=90)
         assert is_date_valid(old, max_age_days=60) is False
 
     def test_none_is_invalid(self):
         assert is_date_valid(None) is False
-
-
-# ── is_entry_level ────────────────────────────────────────────────────────
-# NOTE: We replicate the logic here to avoid importing the `requests`
-# library in tests (broken idna package on Python 3.13 CI environments).
-
-ENTRY_LEVEL_KEYWORDS = [
-    'intern', 'graduate', 'junior', 'entry', 'trainee',
-    'apprentice', 'associate', '0-2 years', 'no experience'
-]
-SENIOR_KEYWORDS = [
-    'senior', 'lead', 'manager', 'principal', 'head of',
-    'mid-level', 'mid level', 'intermediate', 'experienced',
-    '3 years', '4 years', '5 years', '5+', 'sr.'
-]
-
-
-def _is_entry_level(item):
-    """Local copy of adzuna.is_entry_level for isolated testing."""
-    title = item.get('title', '').lower()
-    description = item.get('description', '').lower()
-    full_text = title + " " + description
-    if any(k in full_text for k in SENIOR_KEYWORDS):
-        return False
-    if any(k in title for k in ENTRY_LEVEL_KEYWORDS):
-        return True
-    if any(k in description for k in ENTRY_LEVEL_KEYWORDS):
-        return True
-    return False
-
-
-class TestIsEntryLevel:
-
-    def test_senior_title_is_rejected(self):
-        item = {'title': 'Senior Data Engineer', 'description': '5 years experience required'}
-        assert _is_entry_level(item) is False
-
-    def test_junior_title_is_accepted(self):
-        item = {'title': 'Junior Python Developer', 'description': 'Great role for new grads'}
-        assert _is_entry_level(item) is True
-
-    def test_intern_in_description_is_accepted(self):
-        item = {'title': 'Data Analyst', 'description': 'internship program for students'}
-        assert _is_entry_level(item) is True
-
-    def test_plain_title_no_keywords_is_rejected(self):
-        item = {'title': 'Python Developer', 'description': 'Must have strong experience'}
-        assert _is_entry_level(item) is False
-
-    def test_lead_role_is_rejected(self):
-        item = {'title': 'Lead Software Engineer', 'description': 'Lead a team of 10'}
-        assert _is_entry_level(item) is False
-
-    def test_graduate_in_title_is_accepted(self):
-        item = {'title': 'Graduate Data Analyst', 'description': 'Join our graduate programme'}
-        assert _is_entry_level(item) is True

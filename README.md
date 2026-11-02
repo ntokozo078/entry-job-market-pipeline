@@ -1,173 +1,208 @@
-# 🇿🇦 South African Job Market Pipeline & Tracker
+# Entry-Level Job Market Pipeline
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-3.0-green?logo=flask&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169e1?logo=postgresql&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-Pytest-yellow?logo=pytest&logoColor=white)
-![Status](https://img.shields.io/badge/Status-Live-success)
+[![Tests](https://github.com/ntokozo078/entry-job-market-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/ntokozo078/entry-job-market-pipeline/actions/workflows/tests.yml)
 
-> A production-grade data engineering project that automatically collects, cleans, deduplicates, stores, and visualizes entry-level tech jobs — updated daily via a scheduled pipeline.
+A Python batch pipeline that collects entry-level tech jobs for South Africa and six other countries. It filters listings by age and seniority keywords, upserts them into PostgreSQL, retires listings that stop appearing, and serves the results through a Flask website and REST API. The site also has a job application tracker that stays in your browser.
 
-**[🚀 View Live Demo](https://entry-job-market-pipeline.onrender.com/)** · **[📊 Analytics Dashboard](https://entry-job-market-pipeline.onrender.com/stats)** · **[🔌 REST API](https://entry-job-market-pipeline.onrender.com/api/jobs)**
+The pipeline runs on demand. Nothing in this repo schedules it, and the deployed site's data shows no runs after 22 October 2026.
 
----
+- [Website](https://entry-job-market-pipeline.onrender.com/)
+- [Dashboard](https://entry-job-market-pipeline.onrender.com/stats)
+- [REST API](https://entry-job-market-pipeline.onrender.com/api/jobs)
 
-## 📖 The Problem This Solves
+The site is on Render's free tier, so the first request after it has been idle can take up to a minute. On 2 November 2026 it held 102 jobs from its last run on 22 October, all from South Africa through Adzuna. That run predates the fixes described here.
 
-Finding entry-level tech jobs is fragmented and frustrating:
-- Job aggregators show **expired "zombie" listings**
-- Filtering for true "0–2 years experience" roles is unreliable
-- There's no single place for both **SA local** and **global remote** data roles
+## Data sources
 
-This project solves that with a **fully automated daily pipeline** that ingests, cleans, and presents only fresh, relevant opportunities.
+These are real public job listings, not synthetic data.
 
----
+| Source | Type | Coverage |
+|---|---|---|
+| [Adzuna](https://www.adzuna.co.za/) | API, needs a key | South Africa, UK, US, Australia, Germany, Netherlands, Canada |
+| [Remotive](https://remotive.com/) | API, no key | Remote jobs. It added nothing in the runs below |
+| [Careers24](https://www.careers24.com/) | Scraped search pages | South Africa |
 
-## 🏗️ Architecture
+The Careers24 scraper is for personal and educational use. It reads 4 search pages per run, identifies itself in its User-Agent, stores only the card details and links back to the original advert. When I checked on 2 November 2026, `robots.txt` didn't block this client and the jobseeker terms didn't mention automated access. That isn't legal clearance, so check the terms yourself before reusing it.
+
+Adzuna's terms ask sites that publish its listings to label and link each advert, which the job cards do. They describe the free key as being for evaluating the API.
+
+## Architecture
 
 ```mermaid
-flowchart LR
-    A[Adzuna API] -->|HTTP REST| C[Ingestion Layer]
-    B[Careers24 Scraper] -->|BeautifulSoup| C
-
-    C -->|Filters & Normalizes| D{Transform}
-    D -->|Senior filter\nZombie filter\nDeduplication| E[(PostgreSQL\nDatabase)]
-
-    E -->|SQLAlchemy ORM| F[Flask Web App]
-    F -->|Jinja2| G[HTML Dashboard]
-    F -->|JSON| H[REST API /api/jobs]
-
-    I[Render Cron Job] -->|Daily trigger| C
+flowchart TD
+    CLI["run_pipeline.py<br/>manual run"] --> ETL
+    REFRESH["POST /refresh<br/>needs a secret token"] --> ETL
+    ETL["pipeline.run_etl<br/>runs each step in order"]
+    ETL --> ADZ["adzuna.py<br/>age and keyword filters"]
+    ETL --> REM["remotive.py<br/>keyword filters"]
+    ETL --> C24["scraper.py<br/>date and title filters"]
+    ADZAPI["Adzuna API<br/>7 countries"] --> ADZ
+    REMAPI["Remotive API"] --> REM
+    C24WEB["Careers24<br/>search pages"] --> C24
+    ADZ --> LOAD["load_jobs<br/>upsert on source + job ID"]
+    REM --> LOAD
+    C24 --> LOAD
+    LOAD --> DB[("PostgreSQL on Render<br/>SQLite locally")]
+    ETL --> RETIRE["Retention<br/>deactivate, delete, row cap"]
+    RETIRE --> DB
+    DB --> FLASK["Flask app"]
+    FLASK --> PAGES["SA, Global and Dashboard pages"]
+    FLASK --> API["REST API"]
+    FLASK --> TRACK["Tracker page"]
+    TRACK --> LOCAL[("Browser localStorage")]
 ```
 
-**Pipeline Stages:**
-1. **Extract** — Adzuna API (SA + 6 global countries) + Careers24 web scraper
-2. **Transform** — "Zombie filter" (rejects old-year titles), seniority gatekeeper, deduplication by `source_job_id`
-3. **Load** — Upsert into PostgreSQL with SCD Type 1 tracking (`first_seen_at`, `last_seen_at`, `is_active`)
-4. **Retention** — Auto-cleanup: deletes jobs > 30 days old, enforces 1,500-row hard limit
-5. **Serve** — Flask REST API + Chart.js analytics dashboard
+## How each stage works
 
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
+| Stage | What it does |
 |---|---|
-| Language | Python 3.10+ |
-| Web Framework | Flask 3.0 (Blueprints architecture) |
-| Database | PostgreSQL (prod) · SQLite (local dev) |
-| ORM | SQLAlchemy + Flask-SQLAlchemy |
-| ETL | `requests` · `BeautifulSoup4` |
-| Frontend | Custom CSS design system · Chart.js 4 · Jinja2 |
-| Testing | Pytest |
-| Deployment | Render (Web Service + Cron Job) |
+| **Extract** | Adzuna runs up to 76 search terms for South Africa, with a cap of 100 jobs per run, then 15 terms for each of 6 other countries, capped at 20 jobs per country. Remotive requests 3 categories. The scraper reads the first 15 cards on each of 4 Careers24 pages. If one source raises an error, it's logged and the others continue. |
+| **Filter** | **Age:** Adzuna only returns jobs from the last 7 days (South Africa) or 14 days (other countries). Titles naming a year before last year are rejected. **Seniority:** Adzuna and Remotive reject any listing with a senior keyword in its title or description, then require an entry-level keyword. Careers24 only checks the title for "senior" or "lead", because its search page has no description, and it stores "Apply on Careers24" instead. |
+| **Load** | Upserts on `(source, source_job_id)`, which has a unique constraint. New jobs are inserted. Existing jobs have their fields overwritten and `last_seen_at` updated, while `first_seen_at` stays the same (SCD Type 1). |
+| **Retention** | Each run marks a job inactive if its source hasn't returned it for 30 days, or if it was posted over 150 days ago. It deletes jobs posted over 180 days ago and keeps the table at 1,500 rows or fewer by removing the oldest. |
+| **Serve** | Flask renders paginated South Africa and Global pages, a Chart.js dashboard and a JSON API. Skill demand is a keyword count over job titles, done in SQL. |
+| **Tracker** | A Kanban board at `/tracker`. It's saved in that browser's localStorage, not the database, so it doesn't follow you to another device. |
 
----
+## Results
 
-## 🚀 Key Features
+These come from two runs on 2 November 2026, one after the other, on a new SQLite database with Python 3.13. Listings change daily, so your numbers will differ.
 
-- **Hybrid Ingestion** — Structured API data + unstructured HTML scraping in one pipeline
-- **Smart Filtering** — Entry-level enforcement via keyword analysis across title AND description
-- **Salary Data** — Displays salary range badges on job cards where available (from Adzuna)
-- **Deduplication** — `source + source_job_id` unique constraint prevents duplicate listings
-- **Async Pipeline Refresh** — Manual refresh runs in a background thread; UI shows live status
-- **Analytics Dashboard** — 4 Chart.js charts: source breakdown, top locations, skill demand, 14-day trend
-- **Pagination** — 20 jobs per page with full page navigation
-- **REST API** — `/api/jobs`, `/api/stats`, `/api/health` endpoints with query params
-- **Data Retention** — Automated cleanup policy to keep free-tier DB healthy
+| Source | Jobs kept, run 1 | Jobs kept, run 2 |
+|---|---|---|
+| Adzuna South Africa | 100 (hit the cap) | 100 |
+| Adzuna US | 20 (hit the cap) | 20 |
+| Adzuna Germany | 19 | 19 |
+| Adzuna Netherlands | 18 | 18 |
+| Adzuna UK | 12 | 12 |
+| Adzuna Canada | 11 | 4 |
+| Adzuna Australia | 9 | 9 |
+| Careers24 | 35 | 35 |
+| Remotive | 0 | 0 |
+| **Total** | **224** | **217** |
 
----
+| Database change | Run 1 | Run 2 |
+|---|---|---|
+| New rows | 224 | 7 |
+| Updated rows | 0 | 210 |
+| Deactivated or deleted | 0 | 0 |
+| Rows after cleanup | 224 | 231 |
 
-## 🚀 How to Run Locally
+Each run took about 5 minutes and made about 150 Adzuna requests. In run 2, Adzuna returned HTTP 503 for 5 Canadian searches. The pipeline logged them and carried on, which is the likely reason Canada dropped to 4.
 
-### Prerequisites
-- Python 3.10+
-- Git
+The dataset also has clear quality gaps, listed under limitations below.
 
-### 1. Clone and set up the environment
+## Design decisions
+
+- **Separate caps for South Africa and other countries.** With one shared cap of 100, South African results used up the whole run, so no other country was ever searched.
+- **Use absence as a signal, not proof.** A job can drop out of Adzuna's date-limited search and still be open, so `is_active = false` means "not seen for 30 days", not "closed".
+- **Don't deactivate jobs for a source that returned nothing.** An outage or a broken scraper shouldn't hide all of that source's listings.
+- **Keep the refresh endpoint closed by default.** Each run spends API quota, so `POST /refresh` needs a token, and with no token configured it rejects every request. The public button is gone.
+- **Refuse to start in production without `SECRET_KEY`.** A public default key would be easy to miss otherwise.
+- **Use one Postgres driver.** The app rewrites any Postgres URL to use psycopg 3, so the `postgres://` URLs Render provides work with the only driver installed.
+- **Check the schema before changing it.** Startup adds the salary columns only if they're missing. A migration tool would be better once the schema changes more often.
+
+## Known limitations and next steps
+
+**Filter quality**
+- Keywords match inside longer words: "intern" matches "internal", "lead" matches "leading". Only 163 of the 224 jobs in run 1 had a whole-word entry-level term in the title, and some are off-topic, such as a hospitality recruiter. Next step: match whole words and add a tech-role check.
+- Deduplication only uses the source's job ID, and Adzuna can list the same advert under several IDs. In the final table, 89 of the 231 rows repeated the title and company of another row. Next step: also dedupe on normalised title and company.
+- Only 4 of the 89 jobs from other countries were tagged remote, so the Global page is mostly on-site roles abroad.
+
+**Sources**
+- Remotive added no jobs. Its API returned only 12 unique jobs across the 3 categories when I checked, and 11 had a senior keyword in the title or description.
+- The scraper depends on Careers24's page structure, so a redesign would stop it. When a card shows a closing date, that date is stored as `posted_date`. None of the jobs in these runs had a future date, but it's still wrong.
+- The Adzuna quota depends on your plan, and 150 requests per run may not fit a free key if run daily.
+
+**Running it**
+- There's no scheduler, so the site's data only changes when someone starts a run. Next step: a daily GitHub Actions job that calls `POST /refresh`.
+- `/refresh` runs in a background thread and keeps its status in memory, so a restart loses the status and stops a run in progress.
+- Render's free tier sleeps when idle, and free Render databases expire.
+- Retention keeps jobs for up to 150 days by posting date, but the 30-day rule normally retires them sooner if the pipeline runs regularly.
+
+**Testing**
+- The automated tests use SQLite and stored samples, including a hand-written Careers24 page, so they won't catch a change on a real site. PostgreSQL was checked once by hand against a local server, covering schema setup, upserts and all pages.
+- Skill counts only read job titles, and each count scans the table because `ILIKE '%term%'` can't use an index.
+
+## Quickstart
+
+You need Python. This was tested on Windows with Python 3.13, using SQLite, so you don't need to set up a database. An [Adzuna key](https://developer.adzuna.com/) is free, and without one the pipeline skips Adzuna and runs the other sources.
+
 ```bash
 git clone https://github.com/ntokozo078/entry-job-market-pipeline.git
 cd entry-job-market-pipeline
 python -m venv venv
-
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
 ```
 
-### 2. Configure environment variables
+On **Windows (PowerShell)**:
+
+```powershell
+venv\Scripts\Activate.ps1
+Copy-Item .env.example .env
+```
+
+On **macOS/Linux**:
+
 ```bash
+source venv/bin/activate
 cp .env.example .env
-# Edit .env and add your Adzuna API keys
-# Get free keys at: https://developer.adzuna.com/
 ```
 
-### 3. Initialize the database and run
+Add your Adzuna keys to `.env`, then install and run the pipeline. A full run takes about 5 minutes.
+
+```bash
+pip install -r requirements.txt
+python run_pipeline.py
+```
+
+Start the site at `http://localhost:5000`:
+
 ```bash
 python run.py
 ```
 
-The app will start on `http://localhost:5000`. It uses SQLite locally — no PostgreSQL setup needed.
+Run the tests, which need no keys or network:
 
-### 4. Run the pipeline manually
 ```bash
-python run_pipeline.py
+pip install -r requirements-dev.txt
+python -m pytest
 ```
 
-### 5. Run tests
-```bash
-python -m pytest tests/ -v
-```
+Render starts the app with `gunicorn run:app`, as set in the `Procfile`. Gunicorn doesn't run on Windows, so use `python run.py` there. On Render, set `SECRET_KEY` and `DATABASE_URL`, plus the Adzuna keys and `REFRESH_TOKEN` if you want to start runs there.
 
----
-
-## 🔌 API Reference
+## API reference
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/jobs` | GET | List active jobs. Params: `type`, `location`, `source`, `limit` |
-| `/api/stats` | GET | Aggregate counts by source |
-| `/api/health` | GET | DB health check — returns 200 OK or 503 |
+| `/api/jobs` | GET | Active jobs, newest first. Optional parameters: `type` (title keyword), `location`, `source`, `limit` (default 50, maximum 200) |
+| `/api/stats` | GET | Total and active counts, and rows per source |
+| `/api/health` | GET | 200 if the database is reachable, otherwise 503 |
+| `/refresh` | POST | Starts a run. Needs an `X-Refresh-Token` header. Returns 202, 403 for a bad token, or 409 if one is already running |
+| `/refresh/status` | GET | State of a run started through `/refresh` on this server process |
 
-**Example:**
 ```bash
-# Get junior Python jobs in Johannesburg
 curl "https://entry-job-market-pipeline.onrender.com/api/jobs?type=python&location=johannesburg"
+```
+
+## Project layout
+
+```text
+run.py                  Web entry point
+run_pipeline.py         Runs the pipeline once
+app/
+  __init__.py           App factory and schema setup
+  config.py             Settings from the environment
+  models.py             Job table
+  api/routes.py         REST API
+  web/routes.py         Pages and /refresh
+  templates/            HTML pages, including the tracker
+ingestion/
+  pipeline.py           Load and retention steps
+  utils.py              Date and title helpers
+  extractors/           Adzuna, Remotive and Careers24
+tests/                  Pytest suite and stored samples
 ```
 
 ---
 
-## 💡 Challenges & Solutions
-
-| Challenge | Solution |
-|---|---|
-| **Render free tier kills idle DB connections** | `pool_pre_ping=True` + `pool_recycle=300` in SQLAlchemy engine options |
-| **Synchronous refresh blocked the web server** | Moved pipeline to a background `threading.Thread`; frontend polls `/refresh/status` |
-| **Careers24 DOM changes break the scraper** | Multiple CSS selector fallbacks; try/except per card; silently skips broken cards |
-| **"Zombie jobs" — listings years old** | Regex year extractor in title; rejects any title with a year > 1 year in the past |
-| **Adzuna API rate limits & timeouts** | Circuit breaker (50-job cap per run), 0.2s sleep between requests, per-exception error handling |
-| **In-memory skill counting was O(n) on all titles** | Replaced with parameterized SQL `LIKE` count queries — O(1) per skill |
-
----
-
-## 🗺️ Future Improvements
-
-- [ ] Email digest: subscribe to daily job alerts by category
-- [ ] Salary histogram on the analytics dashboard
-- [ ] Filter sidebar (by source, location, job type) without full page reload
-- [ ] Glassdoor/LinkedIn data source integration
-- [ ] Full-text search with PostgreSQL `tsvector`
-- [ ] Containerize with Docker for easier local setup
-
----
-
-## 📄 License
-
-MIT License — feel free to fork and adapt for your own job market.
-
----
-
-*Built by Ntokozo · Flask + Python + PostgreSQL · Hosted on Render*
+**Ntokozo Ntombela** · Graduate Data Engineer · Microsoft Certified: Fabric Data Engineer Associate (DP-700)
+[LinkedIn](https://www.linkedin.com/in/ntokozo-ntombela-ba662235a) · [Portfolio](https://data-engineering-portfolio-xi.vercel.app/)

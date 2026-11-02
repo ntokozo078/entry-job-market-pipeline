@@ -1,7 +1,6 @@
 # app/api/routes.py
-from datetime import datetime
 from flask import Blueprint, jsonify, request
-from app.models import db, Job
+from app.models import db, Job, utc_now
 
 api_bp = Blueprint('api', __name__)
 
@@ -61,7 +60,7 @@ def get_stats():
         'total_jobs_scraped': total_jobs,
         'active_jobs_now': active_jobs,
         'by_source': source_breakdown,
-        'generated_at': datetime.utcnow().isoformat(),
+        'generated_at': utc_now().isoformat(),
     })
 
 
@@ -83,5 +82,5 @@ def health_check():
     return jsonify({
         'status': 'ok' if db_ok else 'degraded',
         'db_connected': db_ok,
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': utc_now().isoformat(),
     }), status_code

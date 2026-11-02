@@ -1,6 +1,7 @@
 import logging
-from datetime import datetime, timedelta
-from app.models import db, Job
+from collections import Counter
+from datetime import timedelta
+from app.models import db, Job, utc_now
 from ingestion.extractors.adzuna import fetch_adzuna_jobs
 from ingestion.extractors.scraper import scrape_careers24
 from ingestion.extractors.remotive import fetch_remotive_jobs
@@ -8,12 +9,37 @@ from ingestion.extractors.remotive import fetch_remotive_jobs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
+
 # Retention Policy Constants
-# ---------------------------------------------------------------------------
 DISPLAY_MAX_DAYS = 150   # 5 months  — jobs older than this are marked inactive
 DELETE_MAX_DAYS  = 180   # 6 months  — jobs older than this are deleted entirely
 HARD_ROW_LIMIT   = 1500  # Maximum rows to keep on Render free tier
+NOT_SEEN_MAX_DAYS = 30   # jobs missing from their source's results this long are marked inactive
+
+
+def deactivate_unseen_jobs(sources: set, max_days: int = NOT_SEEN_MAX_DAYS) -> int:
+    """
+    Mark jobs inactive when their source has stopped returning them.
+    Only `sources` are checked: pass the ones that returned jobs in this run,
+    so an outage at one source doesn't hide all of its listings.
+    Absence from search results is a signal, not proof the job has closed.
+    Returns the count of jobs deactivated.
+    """
+    if not sources:
+        return 0
+
+    cutoff = utc_now() - timedelta(days=max_days)
+    count = (
+        Job.query
+        .filter(Job.is_active == True)
+        .filter(Job.source.in_(sources))
+        .filter(Job.last_seen_at < cutoff)
+        .update({'is_active': False}, synchronize_session=False)
+    )
+    if count:
+        db.session.commit()
+        logger.info(f"Deactivated {count} jobs not seen for {max_days} days.")
+    return count
 
 
 def deactivate_old_jobs(max_days: int = DISPLAY_MAX_DAYS) -> int:
@@ -22,7 +48,7 @@ def deactivate_old_jobs(max_days: int = DISPLAY_MAX_DAYS) -> int:
     in the UI, without immediately deleting them.
     Returns the count of jobs deactivated.
     """
-    cutoff = datetime.utcnow() - timedelta(days=max_days)
+    cutoff = utc_now() - timedelta(days=max_days)
     count = (
         Job.query
         .filter(Job.is_active == True)
@@ -31,23 +57,24 @@ def deactivate_old_jobs(max_days: int = DISPLAY_MAX_DAYS) -> int:
     )
     if count:
         db.session.commit()
-        logger.info(f"🔕 Deactivated {count} jobs older than {max_days} days.")
+        logger.info(f"Deactivated {count} jobs older than {max_days} days.")
     return count
 
 
-def cleanup_old_jobs(max_days: int = DELETE_MAX_DAYS, max_rows: int = HARD_ROW_LIMIT) -> None:
+def cleanup_old_jobs(max_days: int = DELETE_MAX_DAYS, max_rows: int = HARD_ROW_LIMIT) -> int:
     """
     Data Retention Policy:
     1. Deletes jobs older than `max_days` (6 months) to free storage.
     2. Enforces a hard cap of `max_rows` to keep Render's free-tier DB healthy.
 
     Commits date-based deletions FIRST so the subsequent count is accurate.
+    Returns the count of jobs deleted.
     """
     logger.info("--- Starting Database Cleanup ---")
 
     try:
         # 1. Delete jobs older than max_days (6 months)
-        cutoff = datetime.utcnow() - timedelta(days=max_days)
+        cutoff = utc_now() - timedelta(days=max_days)
         deleted_by_date = (
             Job.query
             .filter(Job.posted_date < cutoff.date())
@@ -73,20 +100,60 @@ def cleanup_old_jobs(max_days: int = DELETE_MAX_DAYS, max_rows: int = HARD_ROW_L
 
         total = deleted_by_date + deleted_by_limit
         if total:
-            logger.info(f"🧹 Cleanup done: deleted {deleted_by_date} old + {deleted_by_limit} excess = {total} total.")
+            logger.info(f"Cleanup done: deleted {deleted_by_date} old + {deleted_by_limit} excess = {total} total.")
         else:
-            logger.info("🧹 Cleanup done: database is healthy, nothing deleted.")
+            logger.info("Cleanup done: nothing deleted.")
+        return total
 
     except Exception as e:
         db.session.rollback()
         logger.error(f"!!! Cleanup failed: {e}")
+        return 0
 
 
-def run_etl() -> int:
+def load_jobs(raw_jobs: list) -> tuple[int, int]:
+    """
+    Upsert on (source, source_job_id). New jobs are inserted. Existing jobs get
+    their fields overwritten with the latest values and `last_seen_at` refreshed;
+    `first_seen_at` is kept. Returns (new_count, updated_count).
+    """
+    now = utc_now()
+    new_count = updated_count = 0
+
+    for job_data in raw_jobs:
+        existing = Job.query.filter_by(
+            source=job_data.get('source'),
+            source_job_id=job_data.get('source_job_id'),
+        ).first()
+
+        try:
+            if existing:
+                for field, value in job_data.items():
+                    setattr(existing, field, value)
+                existing.is_active = True
+                existing.last_seen_at = now
+                updated_count += 1
+            else:
+                db.session.add(Job(**job_data, first_seen_at=now, last_seen_at=now))
+                new_count += 1
+        except Exception as e:
+            logger.error(f"Failed to prepare job '{job_data.get('title', 'Unknown')}': {e}")
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    logger.info(f"Committed {new_count} new and {updated_count} updated jobs.")
+    return new_count, updated_count
+
+
+def run_etl() -> dict:
     """
     Main ETL (Extract, Transform, Load) pipeline.
     Sources: Adzuna API (SA + Global) · Careers24 scraper · Remotive.io API
-    Returns the number of new jobs committed to the database.
+    Returns a summary of what the run extracted and changed.
     """
     logger.info("=== Starting ETL Pipeline ===")
 
@@ -116,37 +183,29 @@ def run_etl() -> int:
         f"Starting deduplication..."
     )
 
-    # ── 2. TRANSFORM & LOAD ─────────────────────────────────────────────────
-    new_count = 0
+    # ── 2. LOAD ─────────────────────────────────────────────────────────────
+    new_count, updated_count = load_jobs(all_raw_jobs)
+    extracted = Counter(job['source'] for job in all_raw_jobs)
 
-    for job_data in all_raw_jobs:
-        exists = Job.query.filter_by(
-            source=job_data.get('source'),
-            source_job_id=job_data.get('source_job_id'),
-        ).first()
-
-        if not exists:
-            try:
-                new_job = Job(**job_data)
-                db.session.add(new_job)
-                new_count += 1
-            except Exception as e:
-                logger.error(f"Failed to prepare job '{job_data.get('title', 'Unknown')}': {e}")
-
-    try:
-        db.session.commit()
-        logger.info(f"✅ Committed {new_count} new jobs to the database.")
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Database commit failed: {e}")
-
-    # ── 3. DEACTIVATE old jobs (5-month threshold) ──────────────────────────
-    deactivate_old_jobs(max_days=DISPLAY_MAX_DAYS)
+    # ── 3. DEACTIVATE jobs the source stopped returning, then old jobs ──────
+    deactivated_unseen = deactivate_unseen_jobs(set(extracted))
+    deactivated_old = deactivate_old_jobs(max_days=DISPLAY_MAX_DAYS)
 
     # ── 4. DELETE very old jobs + enforce row limit (6-month threshold) ─────
-    cleanup_old_jobs(max_days=DELETE_MAX_DAYS, max_rows=HARD_ROW_LIMIT)
+    deleted = cleanup_old_jobs(max_days=DELETE_MAX_DAYS, max_rows=HARD_ROW_LIMIT)
 
-    return new_count
+    summary = {
+        'extracted': dict(extracted),
+        'new': new_count,
+        'updated': updated_count,
+        'deactivated_unseen': deactivated_unseen,
+        'deactivated_old': deactivated_old,
+        'deleted': deleted,
+        'rows_after': Job.query.count(),
+        'active_after': Job.query.filter_by(is_active=True).count(),
+    }
+    logger.info(f"Run summary: {summary}")
+    return summary
 
 
 if __name__ == "__main__":

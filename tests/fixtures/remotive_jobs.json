@@ -1,0 +1,31 @@
+{
+  "jobs": [
+    {
+      "id": 3001,
+      "url": "https://remotive.com/remote-jobs/data/junior-data-analyst-3001",
+      "title": "Junior Data Analyst",
+      "company_name": "Example Remote",
+      "publication_date": "2026-10-28T12:00:00",
+      "candidate_required_location": "Worldwide",
+      "description": "<p>A good first role for someone with SQL skills.</p>"
+    },
+    {
+      "id": 3002,
+      "url": "https://remotive.com/remote-jobs/data/senior-data-engineer-3002",
+      "title": "Senior Data Engineer",
+      "company_name": "Example Remote",
+      "publication_date": "2026-10-28T12:00:00",
+      "candidate_required_location": "Worldwide",
+      "description": "<p>Own our data platform.</p>"
+    },
+    {
+      "id": 3003,
+      "url": "https://remotive.com/remote-jobs/software-dev/python-developer-3003",
+      "title": "Python Developer",
+      "company_name": "Example Remote",
+      "publication_date": "2026-10-28T12:00:00",
+      "candidate_required_location": "Europe",
+      "description": "<p>Build APIs in Python.</p>"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 Flask==3.0.0
 Flask-SQLAlchemy==3.1.1
-psycopg2-binary
+SQLAlchemy==2.1.6
+psycopg[binary]==3.3.6
 requests==2.31.0
 beautifulsoup4==4.12.2
 python-dotenv==1.0.0
-gunicorn
-psycopg[binary]
+gunicorn==26.2.0

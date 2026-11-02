@@ -1,9 +1,13 @@
+import hmac
+import logging
 import threading
-from datetime import datetime, timedelta, date
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from datetime import timedelta, date
+from flask import Blueprint, current_app, render_template, request, jsonify
 from sqlalchemy import func
-from app.models import db, Job
+from app.models import db, Job, utc_now
 from ingestion.pipeline import run_etl, DISPLAY_MAX_DAYS
+
+logger = logging.getLogger(__name__)
 
 web_bp = Blueprint('web', __name__)
 
@@ -18,7 +22,7 @@ _pipeline_state = {
 
 def _active_cutoff() -> date:
     """Jobs older than this are considered inactive/ghost — not shown."""
-    return (datetime.utcnow() - timedelta(days=DISPLAY_MAX_DAYS)).date()
+    return (utc_now() - timedelta(days=DISPLAY_MAX_DAYS)).date()
 
 def _get_category_counts(base_query):
     """Calculate job counts for the sidebar categories based on the current base query."""
@@ -77,7 +81,7 @@ def index():
 
 @web_bp.route('/global')
 def global_jobs():
-    """Global: Remote data/tech jobs — last 5 months"""
+    """Global: data/tech jobs outside SA, only some of them remote — last 5 months"""
     search_query = request.args.get('q', '')
     page = request.args.get('page', 1, type=int)
     per_page = 20
@@ -106,7 +110,7 @@ def global_jobs():
         jobs=pagination.items,
         pagination=pagination,
         search_query=search_query,
-        page_title="🌍 Global Remote Data Jobs",
+        page_title="🌍 Global Data Jobs",
         category_counts=counts,
     )
 
@@ -141,7 +145,8 @@ def stats():
         .all()
     )
 
-    # Skill demand via SQL LIKE (stays in DB, uses index)
+    # Keyword counts on job titles, done in SQL rather than loading every row into Python.
+    # ILIKE '%term%' can't use an index, so each count scans the table.
     skills_to_track = [
         'python', 'sql', 'java', 'aws', 'azure', 'react',
         'data engineer', 'analyst', 'cyber', 'intern',
@@ -163,14 +168,15 @@ def stats():
     trend_data = (
         db.session.query(Job.posted_date, func.count(Job.id))
         .filter(Job.is_active == True)
-        .filter(Job.posted_date >= (datetime.utcnow() - timedelta(days=14)).date())
+        .filter(Job.posted_date >= (utc_now() - timedelta(days=14)).date())
         .group_by(Job.posted_date)
         .order_by(Job.posted_date.asc())
         .all()
     )
 
-    last_run = _pipeline_state.get('last_run')
-    last_run_str = last_run.strftime('%d %b %Y, %H:%M') if last_run else 'Not run yet'
+    # Read from the database because in-memory state is lost when the free-tier service sleeps
+    last_run = db.session.query(func.max(Job.last_seen_at)).scalar()
+    last_run_str = last_run.strftime('%d %b %Y, %H:%M UTC') if last_run else 'Not run yet'
 
     return render_template(
         'stats.html',
@@ -185,8 +191,13 @@ def stats():
         trend_labels=[str(t[0]) for t in trend_data],
         trend_values=[t[1] for t in trend_data],
         last_run=last_run_str,
-        pipeline_running=_pipeline_state['running'],
     )
+
+
+@web_bp.route('/tracker')
+def tracker():
+    """Kanban application tracker. Its data stays in the visitor's browser (localStorage)."""
+    return render_template('tracker.html')
 
 
 # ---------------------------------------------------------------------------
@@ -196,26 +207,29 @@ def stats():
 def _run_pipeline_in_background(app):
     with app.app_context():
         try:
-            new_jobs = run_etl()
-            _pipeline_state['last_result'] = new_jobs
+            _pipeline_state['last_result'] = run_etl()
         except Exception as e:
             logger.error(f"Background pipeline error: {e}")
             _pipeline_state['last_result'] = f'error: {e}'
         finally:
             _pipeline_state['running'] = False
-            _pipeline_state['last_run'] = datetime.utcnow()
+            _pipeline_state['last_run'] = utc_now()
+
+
+def _refresh_token_is_valid() -> bool:
+    expected = current_app.config.get('REFRESH_TOKEN')
+    supplied = request.headers.get('X-Refresh-Token', '')
+    return bool(expected) and hmac.compare_digest(supplied.encode(), expected.encode())
 
 
 @web_bp.route('/refresh', methods=['POST'])
 def refresh_data():
-    from flask import current_app
-    import logging
-    global logger
-    logger = logging.getLogger(__name__)
+    """Starts a pipeline run. Needs the X-Refresh-Token header, because each run spends Adzuna API quota."""
+    if not _refresh_token_is_valid():
+        return jsonify({'error': 'A valid X-Refresh-Token header is required.'}), 403
 
     if _pipeline_state['running']:
-        flash("⏳ Pipeline is already running. Please wait.", "warning")
-        return redirect(url_for('web.index'))
+        return jsonify({'status': 'already_running'}), 409
 
     _pipeline_state['running'] = True
     thread = threading.Thread(
@@ -225,23 +239,14 @@ def refresh_data():
     )
     thread.start()
 
-    flash("🚀 Pipeline started! New jobs will appear in ~30 seconds. Page will update automatically.", "info")
-    return redirect(url_for('web.index'))
+    return jsonify({'status': 'started'}), 202
 
 
 @web_bp.route('/refresh/status')
 def refresh_status():
-    """Polled by the navbar JS to update the spinner state."""
+    """Reports the state of a run started by POST /refresh on this server process."""
     return jsonify({
         'running': _pipeline_state['running'],
         'last_run': _pipeline_state['last_run'].isoformat() if _pipeline_state['last_run'] else None,
         'last_result': _pipeline_state['last_result'],
     })
-
-
-# ---------------------------------------------------------------------------
-# 3. One-time cleanup of existing ghost jobs (on first visit)
-# ---------------------------------------------------------------------------
-
-import logging
-logger = logging.getLogger(__name__)

@@ -1,11 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from ingestion.utils import clean_text, parse_relative_date, is_date_valid
 
+# Identifies this project rather than posing as a browser
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    'User-Agent': 'entry-job-market-pipeline (+https://github.com/ntokozo078/entry-job-market-pipeline)'
 }
 
 SEARCH_URLS = [
@@ -39,7 +40,7 @@ def scrape_careers24():
                     if closing_date_tag:
                         clean_str = clean_text(closing_date_tag).lower().replace('closing date:', '').strip()
                         job_date = parse_relative_date(clean_str)
-                        if job_date < datetime.utcnow().date(): continue 
+                        if job_date < datetime.now(timezone.utc).date(): continue
                     else:
                         date_tag = card.find('span', class_='job-card-date')
                         date_text = date_tag.text if date_tag else "Today"

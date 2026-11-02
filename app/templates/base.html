@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Entry-level tech job tracker for South Africa and global remote data engineering roles. Updated daily via an automated pipeline.">
+  <meta name="description" content="Entry-level tech job tracker for South Africa and data engineering roles in six other countries.">
   <title>{% block title %}Job Tracker — Entry-Level SA &amp; Global Tech Roles{% endblock %}</title>
 
   <!-- Preconnect for Google Fonts performance -->
@@ -22,7 +22,7 @@
     <div class="container navbar-inner">
 
       <a class="navbar-brand" href="/" aria-label="Home">
-        <span class="brand-dot" title="Pipeline active"></span>
+        <span class="brand-dot"></span>
         JobTracker ZA
       </a>
 
@@ -36,21 +36,12 @@
         <a href="/" class="nav-link {% if request.endpoint == 'web.index' %}active{% endif %}"
            id="nav-sa-jobs">🇿🇦 SA Local</a>
         <a href="/global" class="nav-link {% if request.endpoint == 'web.global_jobs' %}active{% endif %}"
-           id="nav-global-jobs">🌍 Global Remote</a>
+           id="nav-global-jobs">🌍 Global</a>
         <a href="/stats" class="nav-link {% if request.endpoint == 'web.stats' %}active{% endif %}"
            id="nav-stats">📊 Dashboard</a>
         <a href="/tracker" class="nav-link {% if request.endpoint == 'web.tracker' %}active{% endif %}"
            id="nav-tracker">📋 Tracker</a>
         <a href="/api/jobs" class="nav-link" id="nav-api" target="_blank" rel="noopener">API ↗</a>
-
-        <!-- Refresh Button -->
-        <form id="refresh-form" action="{{ url_for('web.refresh_data') }}" method="POST" style="display:inline;">
-          <button type="submit" class="btn-refresh" id="btn-refresh" title="Trigger pipeline refresh">
-            <span class="refresh-icon">↻</span>
-            <span class="spinner"></span>
-            Refresh
-          </button>
-        </form>
       </div>
 
     </div>
@@ -88,45 +79,6 @@
   </footer>
 
   <!-- ===================== SCRIPTS ===================== -->
-  <script>
-    // --- Refresh button: show spinner while polling status ---
-    (function () {
-      const form = document.getElementById('refresh-form');
-      const btn  = document.getElementById('btn-refresh');
-      if (!form || !btn) return;
-
-      form.addEventListener('submit', function () {
-        btn.classList.add('running');
-        btn.disabled = true;
-
-        // Poll /refresh/status every 3 seconds, remove spinner when done
-        const poll = setInterval(function () {
-          fetch('/refresh/status')
-            .then(r => r.json())
-            .then(data => {
-              if (!data.running) {
-                clearInterval(poll);
-                btn.classList.remove('running');
-                btn.disabled = false;
-              }
-            })
-            .catch(() => clearInterval(poll));
-        }, 3000);
-      });
-
-      // On page load: if pipeline is already running (e.g. user refreshed the page), show spinner
-      fetch('/refresh/status')
-        .then(r => r.json())
-        .then(data => {
-          if (data.running) {
-            btn.classList.add('running');
-            btn.disabled = true;
-          }
-        })
-        .catch(() => {});
-    })();
-  </script>
-
   {% block extra_scripts %}{% endblock %}
 
   <script>
